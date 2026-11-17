@@ -5,6 +5,7 @@
  */
 import { runMigrations } from './migrations/index.js';
 import { ensureBaseAccounts } from './seed/baseAccounts.js';
+import { seedDeparture, SEED_VERSION } from './seed/departure.js';
 
 export const STORE_KEY = 'rabel_v7';
 
@@ -15,7 +16,10 @@ export function createEmptyState() { return { __v: 0 }; }
 function boot(existing, ctx) {
   const state = existing && typeof existing === 'object' ? existing : createEmptyState();
   runMigrations(state, ctx);
-  return ctx.baseAccounts ? ensureBaseAccounts(state) : state;
+  if (!ctx.baseAccounts) return state;
+  ensureBaseAccounts(state);
+  if ((state.seed_version || 0) < SEED_VERSION) seedDeparture(state);
+  return state;
 }
 
 /**

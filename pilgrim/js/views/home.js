@@ -65,7 +65,7 @@ function successHtml(d) {
       ${noJourney ? noJourneyHtml() : `
         <div>
           <h2 class="section-title">Departure</h2>
-          ${departureHtml(d.departure)}
+          <div class="card"><p class="fs-sm muted">Departure bag collection now happens at your residence. Sign in with your Nusuk ID or airline booking reference to book it.</p></div>
         </div>
         ${d.arrival.hasArrival ? `
         <div>
