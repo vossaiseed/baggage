@@ -212,3 +212,12 @@ Exact contents of `system-admin` roles/users screens, `operations-manager/api.js
 * **LPN layout** documented: issuer = digits 1–3, serial = digits 4–9, digit 10 not validated (Rabel cannot know the airline's check-digit rule).
 * **Boarding-pass tile** counts only travelers that have airline boarding-pass data (the one traveler missing from airline data appears under "data missing" instead).
 * **Not yet:** "Damaged tag" requests from check-in (Phase 3 creates the `Damaged Tag` exception the Backend list already reads); scan statuses Attached/Scanned (Phase 3); `seed:departure` npm script + "Reset demo data" (Phase 7).
+
+## 13. Phase 3 — what changed vs the plan (implemented)
+* **Done:** `checkinService`, `scanService`, `exceptionService`, `shared/scan/readFilter.js`, `shared/ui/scanner.{js,css}`; Check-in Staff app rebuilt around assignments (list + per-assignment flow); Backend gets Damaged-tag "Void & replace" and extra-bag tag requests. 140 unit tests.
+* **Staff model:** a Check-in Staff signs in with the shared v7 account (CHK-001/2/3) — one per area. Old counter/centre/appointment screens remain hidden.
+* **Binding:** because a traveler's bags are interchangeable until tagged, a scanned airline tag / Rabel label is bound to the bag row being processed (swapped with the traveler's other bag when it was pre-assigned there). Duplicates are refused.
+* **Absent:** `Traveler Absent` is an exception; staff can book a new slot immediately (status `Rescheduled`) or the traveler picks one; when no slot is left Ops is notified.
+* **`pending_pickups`** now means "checked-in bags handed over and not yet loaded onto a collection truck" (the seed recomputes it); Phase 4 decrements it when Transport loads.
+* **Not browser-testable here:** camera scanning (needs a device); it is covered by unit tests of the read-acceptance logic only. The handheld path was driven end to end in Chrome.
+* **Noted:** the extra-bag `extra_approval` goes Pending (booked) → Requested (accepted at residence); there is no airline approval workflow yet (Phase 7 Admin policy only).

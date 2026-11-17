@@ -1,0 +1,16 @@
+/* Shared scanner component (shared/ui/scanner.js). Uses each app's design tokens. */
+.rs-scanner{display:flex;flex-direction:column;gap:var(--s3);background:var(--surface);border:2px solid var(--accent);border-radius:var(--r-lg);padding:var(--s4)}
+.rs-hint{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--text)}
+.rs-sub{font-size:var(--fs-xs);color:var(--muted)}
+.rs-input{width:100%;height:56px;font-size:var(--fs-lg);font-family:var(--mono);letter-spacing:.04em;border:2px solid var(--border-strong);border-radius:var(--r);padding-inline:var(--s4);background:var(--surface)}
+.rs-input:focus{border-color:var(--accent);outline:none;box-shadow:var(--focus)}
+.rs-input.is-manual{border-color:var(--warning);background:var(--warning-soft)}
+.rs-row{display:flex;gap:var(--s2);flex-wrap:wrap}
+.rs-row .btn{flex:1;min-width:140px}
+.rs-camera{display:none;border-radius:var(--r);overflow:hidden;background:#000}
+.rs-camera.is-on{display:block}
+.rs-result{display:flex;gap:var(--s2);align-items:flex-start;padding:var(--s3);border-radius:var(--r);font-size:var(--fs-sm)}
+.rs-result.ok{background:var(--success-soft);color:#14532D}
+.rs-result.fail{background:var(--danger-soft);color:#7F1D1D}
+.rs-result strong{display:block}
+.rs-scanner[aria-busy="true"]{opacity:.7}

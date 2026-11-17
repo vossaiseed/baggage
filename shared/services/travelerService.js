@@ -198,7 +198,7 @@ export function airlinePolicyFor(state, traveler) {
   return { airline, bags_allowed: airline.bags_allowed, extra_bags_max: airline.extra_bags_max, max_bag_weight_kg: airline.max_bag_weight_kg };
 }
 
-const ACTIVE_ASSIGNMENT = ['Assigned', 'En Route', 'Arrived', 'Collected', 'Handed to Transport', 'Traveler Absent'];
+const ACTIVE_ASSIGNMENT = ['Assigned', 'En Route', 'Arrived', 'Collected', 'Handed to Transport', 'Traveler Absent', 'Rescheduled'];
 
 export function activeAssignment(state, travelerId) {
   return state.collectionAssignments.find((a) => a.traveler_id === travelerId && ACTIVE_ASSIGNMENT.includes(a.status)) || null;
@@ -254,11 +254,23 @@ export function bookCollection(state, travelerId, input, ctx = {}) {
   };
   state.collectionAssignments.push(assignment);
   slotRow.booked_count += 1;
-  area.pending_pickups = state.collectionAssignments.filter((a) => a.collection_area_id === area.id && a.status === 'Assigned').length;
 
   integrations().sms.send(state, { traveler_id: t.id, phone: res.contact_phone, text: `Rabel: keep your ${n} bag(s) ready at ${res.building}, flat ${res.flat_no} at ${fmtTime(slotRow.start)}–${fmtTime(slotRow.end)}.` }, ctx);
   audit(state, { user, now: ctx.now }, { action: 'assignment.book', entity: 'CollectionAssignment', entityId: assignment.id, after: { bags: n, slot: slotRow.id } });
   return { assignment, bags, slot: slotRow, extraCount };
+}
+
+/** Move an assignment to another slot, keeping both slots' booked counts right. */
+export function moveSlot(state, a, slotId, status) {
+  const prev = state.collectionSlots.find((s) => s.id === a.slot_id);
+  const next = state.collectionSlots.find((s) => s.id === slotId);
+  if (prev && prev.id !== next.id) prev.booked_count = Math.max(0, prev.booked_count - 1);
+  if (!prev || prev.id !== next.id) next.booked_count += 1;
+  const before = { slot_id: a.slot_id, status: a.status };
+  a.slot_id = next.id;
+  a.status = status;
+  a.eta = null;
+  return before;
 }
 
 /** Pick a new slot (after "Traveler Absent", or to move a booking). */
@@ -272,15 +284,8 @@ export function rescheduleAssignment(state, assignmentId, slotId, ctx = {}) {
   const slot = availableSlots(state, t.id, ctx).find((s) => s.id === slotId);
   if (!slot) throw new ServiceError('SLOT_UNAVAILABLE', 'That slot is not available inside your collection window.');
   if (slot.full && slot.id !== a.slot_id) throw new ServiceError('SLOT_FULL', 'That slot is full.');
-  const prev = state.collectionSlots.find((s) => s.id === a.slot_id);
-  const next = state.collectionSlots.find((s) => s.id === slotId);
-  if (prev && prev.id !== next.id) prev.booked_count = Math.max(0, prev.booked_count - 1);
-  if (!prev || prev.id !== next.id) next.booked_count += 1;
-  const before = { slot_id: a.slot_id, status: a.status };
-  a.slot_id = next.id;
-  a.status = 'Assigned';
-  a.eta = null;
-  audit(state, { user, now: ctx.now }, { action: 'assignment.reschedule', entity: 'CollectionAssignment', entityId: a.id, before, after: { slot_id: next.id, status: a.status } });
+  const before = moveSlot(state, a, slotId, 'Assigned');
+  audit(state, { user, now: ctx.now }, { action: 'assignment.reschedule', entity: 'CollectionAssignment', entityId: a.id, before, after: { slot_id: a.slot_id, status: a.status } });
   return a;
 }
 

@@ -8,6 +8,7 @@ import { icon, toast, esc } from './ui.js';
 
 import * as loginView from './views/login.js';
 import * as dashboardView from './views/dashboard.js';
+import * as assignmentView from './views/assignment.js';
 import * as exceptionsView from './views/exceptions.js';
 import * as handoverView from './views/handover.js';
 
@@ -293,6 +294,7 @@ function registerRoutes() {
     return loginView.render(params, document.getElementById('app')) || { destroy: loginView.destroy };
   });
   route('/', wrapView(dashboardView));
+  route('/a/:id', wrapView(assignmentView));
   route('/exceptions', wrapView(exceptionsView));
   route('/exceptions/:id', wrapView(exceptionsView));
   route('/handover', wrapView(handoverView));

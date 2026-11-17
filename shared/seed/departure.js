@@ -14,7 +14,7 @@ import { advanceBag } from '../services/bagService.js';
 import { issueInternalLabel } from '../services/tagService.js';
 import { nextCounter } from '../services/audit.js';
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 const H = 3600e3;
 
 export const SEED_AIRLINES = Object.freeze([
@@ -107,6 +107,12 @@ export function seedDeparture(state, opts = {}) {
     if (!slot) continue;
     const { assignment } = bookCollection(state, t.id, { bags: 2, slotId: slot.id }, ctx);
     if (nid === '2000000003') assignment.demo_absent = true; // Phase 3 demo: this traveler will not be at home
+  }
+
+  // pending_pickups = checked-in bags handed over at the residence and not yet loaded onto a collection truck.
+  for (const area of state.collectionAreas) {
+    area.pending_pickups = state.collectionAssignments.filter((x) => x.collection_area_id === area.id && x.status === 'Handed to Transport')
+      .reduce((n, x) => n + state.bags.filter((b) => (x.handed_bag_ids || []).includes(b.id) && b.status === 'Checked-in').length, 0);
   }
 
   state.seed_version = SEED_VERSION;

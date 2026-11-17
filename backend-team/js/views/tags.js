@@ -35,6 +35,7 @@ function flightCard(f) {
 function draw() {
   if (!el) return;
   const batches = [...S().tagImportBatches].reverse();
+  const extra = tags.extraBagRequests(S());
   const damaged = S().exceptions.filter((e) => e.type === 'Damaged Tag' && e.status === 'Open');
   const areas = S().collectionAreas;
   sheet = sheet || { areaId: areas[0]?.id, slotId: '' };
@@ -42,6 +43,10 @@ function draw() {
   el.innerHTML = `
     <div class="page-header"><div><h1 class="page-title">Tags</h1><p class="page-subtitle">Airline tags (LPN) are imported, assigned and released — Rabel cannot create them</p></div></div>
     <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--s4)">${liveFlights().map(flightCard).join('')}</div>
+
+    ${extra.length ? `<h2 class="section-title mt">Extra-bag tag requests <span class="chip chip-amber">${extra.length}</span></h2>
+    <div class="card stack gap-2"><p class="fs-sm muted">Check-in staff accepted extra bag(s) at the residence (within the airline's extra-bag limit). Issue an airline tag from the flight's pool (or an internal tag if the flight has no list).</p>
+      ${extra.map((x) => `<div class="row gap-2 wrap" style="justify-content:space-between"><span><strong>${esc(x.traveler.name)}</strong> · ${esc(x.flight?.code || '')} · ${x.bags.length} bag(s)</span><button type="button" class="btn btn-primary" data-extra="${esc(x.traveler.id)}">Issue tag(s)</button></div>`).join('')}</div>` : ''}
 
     <h2 class="section-title mt">Import history</h2>
     <div class="table-wrap"><table class="data-table"><thead><tr><th>Batch</th><th>File</th><th>When</th><th>OK</th><th>Rejected</th><th>Status</th></tr></thead><tbody>
@@ -53,7 +58,7 @@ function draw() {
     <h2 class="section-title mt">Damaged tag — void &amp; replace</h2>
     <div class="card stack gap-3">
       <p class="fs-sm muted">Check-in staff report a damaged tag; you void the old LPN and a spare from the same batch is assigned and released.</p>
-      ${damaged.length ? `<ul class="stack gap-1">${damaged.map((e) => `<li class="fs-sm">${esc(e.notes || e.id)}</li>`).join('')}</ul>` : '<p class="fs-sm muted">No open requests from check-in.</p>'}
+      ${damaged.length ? `<ul class="stack gap-2">${damaged.map((e) => `<li class="row gap-2 wrap fs-sm" style="justify-content:space-between"><span>${esc(e.notes || e.id)}</span>${e.tag_id ? `<button type="button" class="btn btn-primary" data-void-exc="${esc(e.id)}">Void &amp; replace</button>` : ''}</li>`).join('')}</ul>` : '<p class="fs-sm muted">No open requests from check-in.</p>'}
       <form class="row gap-2 wrap" id="void-form"><input id="void-lpn" class="mono" placeholder="10-digit tag number" maxlength="10" style="min-width:200px" />
         <input id="void-why" placeholder="Reason (required)" style="min-width:220px" /><button type="submit" class="btn btn-secondary">Void &amp; replace</button></form>
     </div>
@@ -71,6 +76,11 @@ function draw() {
   el.querySelectorAll('[data-assign]').forEach((b) => b.addEventListener('click', () => run((s, c) => tags.assignTags(s, b.dataset.assign, c), (r) => `${r.assigned} tag(s) assigned${r.shortage ? ` — ${r.shortage} bag(s) still need a tag` : ''}.`, draw)));
   el.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', () => run((s, c) => tags.releaseTags(s, b.dataset.release, c), (r) => `${r.released} tag(s) released — bags are now "Tag Assigned".`, draw)));
   el.querySelectorAll('[data-internal]').forEach((b) => b.addEventListener('click', () => run((s, c) => tags.issueInternalOnly(s, b.dataset.internal, c), (r) => `${r.issued} bag(s) tagged with internal tags only.`, draw)));
+  el.querySelectorAll('[data-extra]').forEach((b) => b.addEventListener('click', () => run((s, c) => tags.issueExtraBagTags(s, b.dataset.extra, c), (r) => `${r.issued} extra bag(s) tagged${r.waiting ? `, ${r.waiting} waiting for a spare tag` : ''}.`, draw)));
+  el.querySelectorAll('[data-void-exc]').forEach((b) => b.addEventListener('click', () => {
+    const e = S().exceptions.find((x) => x.id === b.dataset.voidExc);
+    run((s, c) => tags.voidAndReplace(s, e.tag_id, 'Damaged at the residence', c), (r) => `Voided ${r.voided.lpn}; replacement ${r.replacement.lpn} released.`, draw);
+  }));
   el.querySelector('#void-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const lpn = el.querySelector('#void-lpn').value.trim();

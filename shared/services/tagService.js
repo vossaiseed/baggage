@@ -187,6 +187,12 @@ export function voidAndReplace(state, tagId, reason, ctx) {
   spare.status = 'Released';
   if (bag) { bag.airline_tag_no = spare.lpn; bag.tag_verified = false; }
   audit(state, ctx, { action: 'tag.replace', entity: 'BagTag', entityId: spare.id, after: { lpn: spare.lpn, replaces: tag.lpn } });
+  // close the check-in staff's replacement request(s) for this tag
+  for (const e of state.exceptions.filter((x) => x.type === 'Damaged Tag' && x.status === 'Open' && x.tag_id === tag.id)) {
+    e.status = 'Resolved';
+    e.resolved_at = nowIso(ctx);
+    e.resolution_notes = `Replaced by ${spare.lpn}`;
+  }
   return { voided: tag, replacement: spare };
 }
 
@@ -214,4 +220,49 @@ export function tagVerification(state, flightId) {
     imported: count('Imported'), assigned: count('Assigned'), released: count('Released'), attached: count('Attached'), scanned: count('Scanned'), void: count('Void'),
     unused: tags.filter((t) => t.status === 'Released').length, total: tags.length, issues,
   };
+}
+
+/** Travelers (data already verified) who have declared bags still waiting for a tag — e.g. extra bags requested at the residence. */
+export function extraBagRequests(state) {
+  const rows = [];
+  for (const t of state.travelers.filter((x) => x.data_verified && !x.legacy)) {
+    const bags = state.bags.filter((b) => b.traveler_id === t.id && b.status === 'Declared' && !b.withdrawn && !b.legacy);
+    if (bags.length) rows.push({ traveler: t, bags, flight: state.flights.find((f) => f.id === t.flight_id) });
+  }
+  return rows;
+}
+
+/**
+ * Backend answers an extra-bag tag request: Declared → Data Verified (+ internal label), an airline LPN
+ * from the flight's pool when one exists (else internal only), released → Tag Assigned.
+ * @returns {{ issued: number, waiting: number }}
+ */
+export function issueExtraBagTags(state, travelerId, ctx) {
+  assertCan(ctx.user, 'tag:assign');
+  assertCan(ctx.user, 'tag:release');
+  const t = state.travelers.find((x) => x.id === travelerId);
+  if (!t) throw new ServiceError('NOT_FOUND', 'Traveler not found.');
+  if (!t.data_verified) throw new ServiceError('NOT_VERIFIED', 'Verify the traveler’s data first.');
+  const flight = state.flights.find((f) => f.id === t.flight_id);
+  const hasList = state.bagTags.some((x) => x.tag_type === 'IATA_LPN' && x.flight_id === flight.id && x.status !== 'Void');
+  let issued = 0;
+  let waiting = 0;
+  for (const bag of state.bags.filter((b) => b.traveler_id === t.id && b.status === 'Declared' && !b.withdrawn && !b.legacy)) {
+    advanceBag(state, bag.id, 'Data Verified', { user: ctx.user, now: ctx.now, note: 'Extra bag requested at the residence' });
+    issueInternalLabel(state, bag);
+    let lpnTag = null;
+    if (hasList) {
+      const free = state.bagTags.filter((x) => x.tag_type === 'IATA_LPN' && x.flight_id === flight.id && x.status === 'Imported' && !x.bag_id);
+      lpnTag = free.find((x) => x.traveler_id === t.id) || free.find((x) => !x.traveler_id) || null;
+      if (!lpnTag) { waiting++; continue; }
+      lpnTag.bag_id = bag.id; lpnTag.traveler_id = t.id; lpnTag.collection_area_id = bag.collection_area_id ?? null; lpnTag.status = 'Released';
+      bag.airline_tag_no = lpnTag.lpn;
+    }
+    advanceBag(state, bag.id, 'Tag Assigned', { user: ctx.user, now: ctx.now, note: lpnTag ? `Extra bag tag ${lpnTag.lpn} released` : 'Extra bag — internal tag only' });
+    const internal = state.bagTags.find((x) => x.tag_type === 'INTERNAL' && x.bag_id === bag.id);
+    if (internal) internal.status = 'Released';
+    issued++;
+  }
+  audit(state, ctx, { action: 'tag.extra_bag', entity: 'Traveler', entityId: t.id, after: { issued, waiting } });
+  return { issued, waiting };
 }

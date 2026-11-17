@@ -169,6 +169,7 @@ const SCOPE_RULES = Object.freeze({
     travelers: { fields: ['collection_area_id'], userKey: 'area_id' },
     collectionAreas: { fields: ['id'], userKey: 'area_id' },
     trips: { fields: ['area_from', 'area_to'], userKey: 'area_id' },
+    exceptions: { fields: ['area_id'], userKey: 'area_id' },
   },
   warehouse: {
     bags: { fields: ['warehouse_id'], userKey: 'warehouse_id' },

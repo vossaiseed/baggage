@@ -51,13 +51,15 @@ export function validateLpn(raw, ctx = {}) {
     return fail('FLIGHT_NOT_FOUND', 'WRONG_FLIGHT', 'Wrong Flight Tag', 'Flight not found.', parts);
   }
 
+  const existing = (ctx.tags || []).find((t) => t.lpn === lpn);
   const allow = ctx.airline?.btic_codes || [];
-  if (!allow.includes(parts.issuer_code)) {
+  const issuerOk = allow.includes(parts.issuer_code);
+  // A tag already in the imported list was issuer-checked at import. In scan mode we look it up FIRST so a
+  // tag of another flight/airline reports "wrong flight" rather than a generic issuer error.
+  if (!issuerOk && !(mode === 'scan' && existing)) {
     return fail('WRONG_ISSUER', 'INVALID_FORMAT', 'Invalid Tag Format',
       `Issuer code ${parts.issuer_code} is not in ${ctx.airline?.code || 'the airline'}'s allowed list (${allow.join(', ') || 'none'}).`, parts);
   }
-
-  const existing = (ctx.tags || []).find((t) => t.lpn === lpn);
 
   if (mode === 'import') {
     if (existing) return fail('DUPLICATE', 'DUPLICATE', 'Duplicate Tag', `Tag ${lpn} already exists.`, parts);
