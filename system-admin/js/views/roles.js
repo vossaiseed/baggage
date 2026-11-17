@@ -5,9 +5,13 @@ let appEl = null;
 let data = null; // { roles, modules, levels, permissions, counts }
 
 const ROLE_DESCRIPTIONS = {
-  checkin: 'Checks pilgrims in and tags bags at a city centre.',
-  warehouse: 'Screens, stores and loads bags at the warehouse.',
-  driver: 'Moves bags between centres, warehouse and airport.',
+  checkin: 'Collects, weighs and tags travelers’ bags at their residence.',
+  warehouse: 'Receives, screens and loads bags truck-to-truck; holds cancelled-flight bags.',
+  backend: 'Nusuk & airline data, airline tags, boarding-pass and tag verification, manifest.',
+  transportmgr: 'Manages Transport Staff, drivers and trucks; dispatches and reroutes.',
+  transportstaff: 'Runs collection and airport trips; counts bags at pickup points.',
+  monitor: 'Read-only 12-hour window wall-board.',
+  driver: 'Retired as a login role (departure). Drivers are now Driver records.',
   airport: 'Coordinates bag flow and truck handover at the airport.',
   airline: 'Receives bags and reconciles manifests for a flight.',
   groundhandler: 'Handles ramp loading and offload on behalf of an airline.',

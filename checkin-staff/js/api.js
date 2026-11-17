@@ -5,6 +5,10 @@
  * A real backend can replace this file without the UI code changing.
  */
 import { getStore, saveStore, resetStore, setSession, getSession } from './store.js';
+import { getStore as getV7Store } from '../../shared/store.js';
+
+/** Shared departure v7 state (users, areas, assignments …). */
+function getV7() { return getV7Store().get(); }
 
 const GLOBAL_FAIL = new URLSearchParams(location.search).get('fail') === '1';
 
@@ -82,34 +86,29 @@ function raiseException(store, opts) {
 /* ===================== AUTH ===================== */
 
 /**
- * @param {string} employeeId @param {string} pin @param {string} centreId @param {number} counterNo @param {boolean} covering
+ * Departure v7 login: employee ID + PIN only (no check-in centre, no counter).
+ * The staff member's collection area comes from the shared v7 store; the
+ * legacy `homeCentre` is kept in the session only so untouched legacy code
+ * paths keep working until Phase 3 replaces them.
+ * @param {string} employeeId @param {string} pin
  */
-export async function staffLogin(employeeId, pin, centreId, counterNo, covering) {
+export async function staffLogin(employeeId, pin) {
   const store = getStore();
   const staff = store.staff.find((s) => s.employeeId.toLowerCase() === String(employeeId).toLowerCase());
   if (!staff || staff.pin !== pin) return fail('Invalid employee ID or PIN.');
-  if (!centreId) return fail('Select a check-in centre.');
-  const counter = Number(counterNo);
-  if (!Number.isInteger(counter) || counter < 1 || counter > 10) return fail('Select a counter (1–10).');
-
-  const inUse = store.shifts.find((sh) => !sh.endedAt && sh.centreId === centreId && sh.counterNo === counter && sh.staffId !== staff.id);
-  if (inUse) {
-    const otherStaff = store.staff.find((s) => s.id === inUse.staffId);
-    return fail(`Counter ${counter} is in use by ${otherStaff?.name || 'another staff member'}.`);
-  }
-
-  if (centreId !== staff.homeCentre && !covering) {
-    return fail(`You are assigned to ${centreName(store, staff.homeCentre)}. Check "covering another centre" to continue.`);
-  }
-
-  let shift = store.shifts.find((sh) => !sh.endedAt && sh.staffId === staff.id && sh.centreId === centreId && sh.counterNo === counter);
+  const v7 = getV7().users.find((u) => u.employee_id === staff.employeeId);
+  if (v7?.status === 'Disabled') return fail('This account is disabled.');
+  const areaId = v7?.area_id || null;
+  const areaName = getV7().collectionAreas.find((a) => a.id === areaId)?.name || centreName(store, staff.homeCentre);
+  let shift = store.shifts.find((sh) => !sh.endedAt && sh.staffId === staff.id);
   if (!shift) {
-    shift = { id: newId('SHIFT'), staffId: staff.id, centreId, counterNo: counter, startedAt: nowIso(), endedAt: null, coveringAnotherCentre: !!covering };
+    shift = { id: newId('SHIFT'), staffId: staff.id, centreId: staff.homeCentre, counterNo: null, startedAt: nowIso(), endedAt: null, coveringAnotherCentre: false };
     store.shifts.push(shift);
   }
   const session = {
     id: staff.id, name: staff.name, employeeId: staff.employeeId, role: staff.role,
-    centreId, centreName: centreName(store, centreId), counterNo: counter, shiftStartedAt: shift.startedAt,
+    centreId: staff.homeCentre, centreName: centreName(store, staff.homeCentre), areaId, areaName,
+    counterNo: null, shiftStartedAt: shift.startedAt,
   };
   setSession(session);
   saveStore();

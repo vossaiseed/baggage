@@ -74,8 +74,8 @@ function depTimeline(uptoIndex, startHoursAgo) {
   for (let i = 0; i <= uptoIndex; i++) {
     const locations = ['Makkah', 'Makkah', 'Makkah', 'Makkah', 'Warehouse — Makkah', 'Warehouse — Makkah',
       'Warehouse — Makkah', 'Warehouse — Makkah', 'En route to JED', 'Jeddah Airport', 'Jeddah Airport', 'Jeddah Airport'];
-    const roles = ['Pilgrim', 'Check-in Staff', 'Check-in Staff', 'Warehouse Staff', 'Warehouse Staff', 'Warehouse Staff',
-      'Warehouse Staff', 'Warehouse Staff', 'Driver', 'Airport Coordinator', 'Airport Coordinator', 'Airline / Ground Handler'];
+    const roles = ['Traveler', 'Check-in Staff', 'Check-in Staff', 'Warehouse Manager', 'Warehouse Manager', 'Warehouse Manager',
+      'Warehouse Manager', 'Warehouse Manager', 'Transport Staff', 'Airport Coordinator', 'Airport Coordinator', 'Airline / Ground Handler'];
     events.push({
       stage: DEPARTURE_STAGES[i],
       time: hoursAgo(startHoursAgo - i * (startHoursAgo / 12)),

@@ -13,8 +13,6 @@ import * as incomingView from './views/incoming.js';
 import * as gateView from './views/gate.js';
 import * as unloadingView from './views/unloading.js';
 import * as screeningView from './views/screening.js';
-import * as storageView from './views/storage.js';
-import * as inventoryView from './views/inventory.js';
 import * as reportsView from './views/reports.js';
 import * as outboundView from './views/outbound.js';
 import * as exceptionsView from './views/exceptions.js';
@@ -22,13 +20,14 @@ import * as handoverView from './views/handover.js';
 
 window.RABEL_DEBUG = window.RABEL_DEBUG || false;
 
+/** Pre-v7 sorting & storage screens: hidden from the menu, unreachable by route. */
+const LEGACY_PATHS = ['/storage', '/inventory'];
+
 const NAV_ITEMS = [
   { hash: '#/', match: '/', label: 'Dashboard', iconName: 'layout-dashboard' },
   { hash: '#/incoming', match: '/incoming', label: 'Incoming trucks', iconName: 'truck' },
   { hash: '#/gate', match: '/gate', label: 'Gate', iconName: 'door-open' },
   { hash: '#/screening', match: '/screening', label: 'Screening', iconName: 'scan-search' },
-  { hash: '#/storage', match: '/storage', label: 'Sorting & storage', iconName: 'layout-grid' },
-  { hash: '#/inventory', match: '/inventory', label: 'Inventory', iconName: 'package-search' },
   { hash: '#/outbound', match: '/outbound', label: 'Outbound', iconName: 'truck' },
   { hash: '#/reports', match: '/reports', label: 'Reports', iconName: 'bar-chart-2' },
   { hash: '#/exceptions', match: '/exceptions', label: 'Exceptions', iconName: 'alert-triangle' },
@@ -36,7 +35,7 @@ const NAV_ITEMS = [
 ];
 
 const WORKSTATIONS = {
-  Gate: '#/gate', 'Unloading Bay': '#/incoming', Screening: '#/screening', Storage: '#/storage', Outbound: '#/outbound',
+  Gate: '#/gate', 'Unloading Bay': '#/incoming', Screening: '#/screening', Storage: '#/', Outbound: '#/outbound',
 };
 
 let shellMounted = false;
@@ -319,8 +318,6 @@ function registerRoutes() {
   route('/gate', wrapView(gateView));
   route('/unloading/:sessionId', wrapView(unloadingView));
   route('/screening', wrapView(screeningView));
-  route('/storage', wrapView(storageView));
-  route('/inventory', wrapView(inventoryView));
   route('/reports', wrapView(reportsView));
   route('/outbound', wrapView(outboundView));
   route('/outbound/:tripId', wrapView(outboundView));
@@ -338,6 +335,8 @@ function registerRoutes() {
   });
 
   setGuard((path) => {
+    // v7: active-flight bags pass straight through; only cancelled-flight bags are held (Phase 5 adds /holding).
+    if (LEGACY_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) return '#/';
     if (path !== '/login' && !isAuthed()) return '#/login';
     if (path === '/login' && isAuthed()) return '#/';
     return true;

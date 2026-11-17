@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Rabel — Hajj Baggage Logistics</title>
-<meta name="description" content="Rabel — the Hajj Baggage Logistics platform. One system, ten role-based consoles, end-to-end bag tracking from check-in to accommodation." />
+<meta name="description" content="Rabel — the Hajj Baggage Logistics platform. One system, role-based consoles, end-to-end bag tracking from check-in to accommodation." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -243,7 +243,7 @@
     <section class="hero">
       <div class="wrap">
         <div class="hero-inner">
-          <span class="eyebrow"><i data-lucide="sparkles"></i> Unified platform · 10 role-based consoles</span>
+          <span class="eyebrow"><i data-lucide="sparkles"></i> Unified platform · role-based consoles</span>
           <h1>Every bag.<br>Every step. <span class="accent">One system.</span></h1>
           <p class="lead">Rabel connects pilgrims, check-in staff, drivers, warehouse teams, airports, airlines, accommodation and delivery staff, and operations &amp; admin teams on one real-time baggage logistics platform — from city check-in to the hotel room door.</p>
           <div class="hero-ctas">
@@ -339,7 +339,7 @@
     <section class="teaser" id="roles-teaser">
       <div class="wrap">
         <div class="section-head">
-          <p class="section-kicker">Ten consoles, one platform</p>
+          <p class="section-kicker">Departure v7 — one platform</p>
           <h2>Find your role</h2>
           <p>Every person in the baggage journey has their own sign-in and their own console.</p>
         </div>
@@ -393,36 +393,53 @@
 </footer>
 
 <script>
+  // Departure v7 roles (no check-in centre: collection happens at the traveler's residence) + arrival/legacy consoles.
+  // `soon` = console is built in a later phase of the departure v7 rollout (card is shown, not linked).
   var ROLES = [
-    { folder: 'pilgrim', name: 'Pilgrim', icon: 'user', accent: '#16A34A', desc: 'Book your city check-in, track your bags, and get support throughout your journey.' },
-    { folder: 'checkin-staff', name: 'Check-in Staff', icon: 'clipboard-check', accent: '#2563EB', desc: 'Register pilgrims, tag bags, and hand off to collection trucks at the check-in centre.' },
-    { folder: 'warehouse-staff', name: 'Warehouse Staff', icon: 'warehouse', accent: '#EA580C', desc: 'Receive, screen, sort, store, and dispatch bags at the central warehouse.' },
-    { folder: 'driver', name: 'Driver', icon: 'truck', accent: '#7C3AED', desc: 'Transport bags between check-in centres, the warehouse, the airport, and accommodation.' },
-    { folder: 'airport-coordinator', name: 'Airport Coordinator', icon: 'plane', accent: '#0284C7', desc: 'Coordinate departure gate handovers, security screening, and arrival flight receiving.' },
-    { folder: 'airline-ground-handler', name: 'Airline / Ground Handler', icon: 'plane-landing', accent: '#4F46E5', desc: 'Accept bag handovers and load or offload baggage for each flight.' },
-    { folder: 'accommodation-receiving-staff', name: 'Accommodation Receiving Staff', icon: 'door-open', accent: '#D97706', desc: 'Receive bag deliveries at the hotel and sort them for room delivery.' },
-    { folder: 'delivery-staff', name: 'Delivery Staff', icon: 'package-check', accent: '#0891B2', desc: 'Deliver bags to pilgrim rooms and confirm delivery on arrival.' },
-    { folder: 'operations-manager', name: 'Operations Manager', icon: 'layout-grid', accent: '#0D9488', desc: 'Monitor departure and arrival operations, exceptions, and performance in real time.' },
-    { folder: 'system-admin', name: 'System Admin', icon: 'settings', accent: '#475569', desc: 'Manage users, roles, configuration, and system-wide settings.' },
+    { group: 'departure', folder: 'pilgrim', name: 'Traveler', icon: 'user', accent: '#16A34A', desc: 'Sign in with your Nusuk ID, book a residence collection slot, and track your bags.' },
+    { group: 'departure', folder: 'backend-team', soon: 'Phase 2', name: 'Backend Team', icon: 'database', accent: '#9333EA', desc: 'Nusuk and airline data, airline tags, boarding-pass checks and the flight manifest.' },
+    { group: 'departure', folder: 'checkin-staff', name: 'Check-in Staff', icon: 'clipboard-check', accent: '#2563EB', desc: 'Collect, weigh and tag bags at the traveler\u2019s residence, then hand them to Transport.' },
+    { group: 'departure', folder: 'transport', soon: 'Phase 4', name: 'Transport Manager', icon: 'truck', accent: '#7C3AED', desc: 'Manage Transport Staff, drivers and trucks; dispatch and reroute.' },
+    { group: 'departure', folder: 'transport', soon: 'Phase 4', hash: '#/trips', name: 'Transport Staff', icon: 'route', accent: '#6D28D9', desc: 'Run collection and airport trips and confirm bag counts at each pickup point.' },
+    { group: 'departure', folder: 'warehouse-staff', name: 'Warehouse Manager', icon: 'warehouse', accent: '#EA580C', desc: 'Receive, screen and load bags truck-to-truck; hold cancelled-flight bags.' },
+    { group: 'departure', folder: 'airport-coordinator', name: 'Airport Coordinator', icon: 'plane', accent: '#0284C7', desc: 'Check seals, offload trucks and hand bags over to the Airport Authority (SGS).' },
+    { group: 'departure', folder: 'window-monitor', soon: 'Phase 7', name: 'Window Monitor', icon: 'monitor', accent: '#0891B2', desc: 'Read-only 12-hour window wall-board for every flight.' },
+    { group: 'departure', folder: 'operations-manager', name: 'Operations Manager', icon: 'layout-grid', accent: '#0D9488', desc: 'Flights, staff, collection areas, exceptions, reports and flight closure.' },
+    { group: 'departure', folder: 'system-admin', name: 'System Admin', icon: 'settings', accent: '#475569', desc: 'Manage accounts, integrations and the airline policy table.' },
+    { group: 'arrival', folder: 'accommodation-receiving-staff', name: 'Accommodation Receiving Staff', icon: 'door-open', accent: '#D97706', desc: 'Receive bag deliveries at the hotel and sort them for room delivery.' },
+    { group: 'arrival', folder: 'delivery-staff', name: 'Delivery Staff', icon: 'package-check', accent: '#0891B2', desc: 'Deliver bags to traveler rooms and confirm delivery on arrival.' },
+    { group: 'arrival', folder: 'driver', name: 'Driver (arrival only)', icon: 'truck', accent: '#7C3AED', desc: 'Arrival transfers only. Departure drivers are managed by the Transport Manager.' },
+    { group: 'arrival', folder: 'airline-ground-handler', name: 'Airline / Ground Handler', icon: 'plane-landing', accent: '#4F46E5', desc: 'Airline module — outside the departure flow. Accept handovers and load or offload baggage.' }
+  ];
+  var GROUPS = [
+    { key: 'departure', title: 'Departure', sub: 'Residence collection to aircraft \u2014 Departure workflow v7' },
+    { key: 'arrival', title: 'Arrival & legacy', sub: 'Arrival workflow and the Airline / Ground Handler module (unchanged)' }
   ];
 
-  // Role cards (unchanged destinations: each role keeps its own login route)
+  function roleCard(r) {
+    var inner =
+      '<div class="role-icon" aria-hidden="true"><i data-lucide="' + r.icon + '"></i></div>' +
+      '<div class="role-body">' +
+        '<h2 class="role-title">' + r.name + '</h2>' +
+        '<p class="role-desc">' + r.desc + '</p>' +
+      '</div>' +
+      (r.soon
+        ? '<span class="role-cta" style="color:var(--muted)">Coming in ' + r.soon + '</span>'
+        : '<span class="role-cta">Log in <i data-lucide="arrow-right"></i></span>');
+    if (r.soon) return '<div class="role-card" aria-disabled="true" style="--role-accent:' + r.accent + ';opacity:.72">' + inner + '</div>';
+    return '<a class="role-card" style="--role-accent:' + r.accent + '" href="./' + r.folder + '/index.html' + (r.hash || '#/login') + '">' + inner + '</a>';
+  }
+
   var grid = document.getElementById('role-grid');
-  grid.innerHTML = ROLES.map(function (r) {
-    return '' +
-      '<a class="role-card" style="--role-accent:' + r.accent + '" href="./' + r.folder + '/index.html#/login">' +
-        '<div class="role-icon" aria-hidden="true"><i data-lucide="' + r.icon + '"></i></div>' +
-        '<div class="role-body">' +
-          '<h2 class="role-title">' + r.name + '</h2>' +
-          '<p class="role-desc">' + r.desc + '</p>' +
-        '</div>' +
-        '<span class="role-cta">Log in <i data-lucide="arrow-right"></i></span>' +
-      '</a>';
+  grid.style.display = 'block';
+  grid.innerHTML = GROUPS.map(function (g) {
+    return '<h2 class="role-group-title" style="margin:var(--s8) 0 var(--s1);font-size:var(--fs-lg)">' + g.title + '</h2>' +
+      '<p style="margin:0 0 var(--s4);color:var(--muted);font-size:var(--fs-sm)">' + g.sub + '</p>' +
+      '<div class="role-grid">' + ROLES.filter(function (r) { return r.group === g.key; }).map(roleCard).join('') + '</div>';
   }).join('');
 
-  // Small role-name chip row on the landing page (preview only, not links)
   var chips = document.getElementById('chip-row');
-  chips.innerHTML = ROLES.map(function (r) {
+  chips.innerHTML = ROLES.filter(function (r) { return r.group === 'departure'; }).map(function (r) {
     return '' +
       '<span class="role-chip">' +
         '<span class="dot-sm" style="background:' + r.accent + '"></span>' +

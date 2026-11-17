@@ -23,14 +23,42 @@ function writeRaw() {
   }
 }
 
+/**
+ * v2 -> v3 (Departure v7): rename Warehouse Staff -> Warehouse Manager (WH- -> WM-),
+ * retire the Driver login role (Disabled, "Moved to Driver records"), add the new
+ * v7 role permission presets. Nothing is deleted.
+ */
+function upgradeV2toV3(s) {
+  const fresh = createSeed();
+  s.__v = 3;
+  for (const u of s.users || []) {
+    if (u.roleId === 'warehouse') {
+      u.roleLabel = 'Warehouse Manager';
+      if (/^WH-/i.test(u.employeeId)) { u.legacyId = u.employeeId; u.employeeId = u.employeeId.replace(/^WH-/i, 'WM-'); }
+    }
+    if (u.roleId === 'driver') {
+      u.roleLabel = 'Driver (legacy)';
+      u.status = 'Disabled';
+      u.disabledReason = 'Moved to Driver records';
+      u.activeSessions = [];
+    }
+  }
+  s.rolePermissions = s.rolePermissions || {};
+  for (const [roleId, matrix] of Object.entries(fresh.rolePermissions)) if (!s.rolePermissions[roleId]) s.rolePermissions[roleId] = matrix;
+  return s;
+}
+
 /** Load state from storage, seeding it on first run. @returns {object} */
 export function loadStore() {
   if (state) return state;
   const existing = readRaw();
-  if (existing && existing.__v === 2) {
+  if (existing && existing.__v === 3) {
     state = existing;
+  } else if (existing && existing.__v === 2) {
+    state = upgradeV2toV3(existing);
+    writeRaw();
   } else {
-    state = { __v: 2, ...createSeed() };
+    state = { __v: 3, ...createSeed() };
     writeRaw();
   }
   return state;

@@ -48,8 +48,8 @@ export const SEVERITIES = ['Low', 'Medium', 'High', 'Critical'];
 export const EXCEPTION_STATUSES = ['Open', 'Assigned', 'In Progress', 'Escalated', 'Resolved', 'Closed'];
 export const TEAMS = ['Investigation', 'Claims', 'Security', 'IT Support', 'Transport', 'Supervisor'];
 export const RAISED_BY_ROLES = [
-  'Check-in Staff', 'Warehouse Staff', 'Driver', 'Airport Coordinator', 'Airline / Ground Handler',
-  'Accommodation Receiving Staff', 'Delivery Staff', 'Pilgrim',
+  'Check-in Staff', 'Warehouse Manager', 'Transport Staff', 'Airport Coordinator', 'Airline / Ground Handler',
+  'Accommodation Receiving Staff', 'Delivery Staff', 'Traveler',
 ];
 export const DISCREPANCY_OUTCOMES = ['Found & delivered', 'Lost — claim filed', 'Offloaded', 'Duplicate record', 'Other'];
 

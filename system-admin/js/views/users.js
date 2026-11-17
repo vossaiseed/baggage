@@ -1,4 +1,5 @@
 import * as api from '../api.js';
+import { getStore as getV7Store } from '../../../shared/store.js';
 import {
   skeletonBlock, errorState, toast, announce, confirmDialog, openDrawer, closeDrawer, openModal,
   fmtDateTime, fmtRelative, esc, icon,
@@ -33,6 +34,7 @@ async function ensureStaticData() {
     ]);
     scopeOptionsCache = {
       centre: centres.filter((c) => c.active).map((c) => c.name),
+      area: getV7Store().get().collectionAreas.map((a) => a.name),
       warehouse: warehouses.filter((w) => w.active).map((w) => w.name),
       airport: airports.filter((a) => a.active).map((a) => a.code),
       hotel: hotels.filter((h) => h.active).map((h) => h.name),
@@ -84,7 +86,7 @@ function renderTable() {
   const toolbarExtraHtml = `
     <select aria-label="Filter by role" data-flt="role">
       <option value="">All roles</option>
-      ${rolesData.roles.map((r) => `<option value="${esc(r.id)}" ${filters.role === r.id ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}
+      ${rolesData.roles.filter((r) => !r.retired).map((r) => `<option value="${esc(r.id)}" ${filters.role === r.id ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}
     </select>
     <select aria-label="Filter by location" data-flt="location">
       <option value="">All locations</option>

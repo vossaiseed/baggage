@@ -25,16 +25,23 @@ const daysAgo = (d) => hoursAgo(d * 24);
 const daysFromNow = (d) => new Date(NOW + d * 86400000).toISOString();
 
 export const STAFF_ROLES = [
-  { id: 'checkin', label: 'Check-in Staff', prefix: 'CHK', scopeType: 'centre', scopeLabel: 'Check-in centre' },
-  { id: 'warehouse', label: 'Warehouse Staff', prefix: 'WH', scopeType: 'warehouse', scopeLabel: 'Warehouse' },
-  { id: 'driver', label: 'Driver', prefix: 'DRV', scopeType: 'none', scopeLabel: '—' },
+  // ── Departure v7 roles ──
+  { id: 'checkin', label: 'Check-in Staff', prefix: 'CHK', scopeType: 'area', scopeLabel: 'Collection area' },
+  { id: 'backend', label: 'Backend Team', prefix: 'BE', scopeType: 'none', scopeLabel: '—' },
+  { id: 'transportmgr', label: 'Transport Manager', prefix: 'TM', scopeType: 'none', scopeLabel: '—' },
+  { id: 'transportstaff', label: 'Transport Staff', prefix: 'TS', scopeType: 'area', scopeLabel: 'Collection area' },
+  { id: 'warehouse', label: 'Warehouse Manager', prefix: 'WM', scopeType: 'warehouse', scopeLabel: 'Warehouse' },
   { id: 'airport', label: 'Airport Coordinator', prefix: 'APC', scopeType: 'airport', scopeLabel: 'Airport' },
-  { id: 'airline', label: 'Airline', prefix: 'AL', scopeType: 'airlineCode', scopeLabel: 'Airline code' },
-  { id: 'groundhandler', label: 'Ground Handler', prefix: 'GH', scopeType: 'airport', scopeLabel: 'Airport' },
-  { id: 'accommodation', label: 'Accommodation Receiving Staff', prefix: 'ACC', scopeType: 'hotel', scopeLabel: 'Hotel' },
-  { id: 'delivery', label: 'Delivery Staff', prefix: 'DLV', scopeType: 'hotel', scopeLabel: 'Hotel' },
+  { id: 'monitor', label: 'Window Monitor', prefix: 'MON', scopeType: 'none', scopeLabel: '—' },
   { id: 'opsmanager', label: 'Operations Manager', prefix: 'OPS', scopeType: 'none', scopeLabel: '—' },
   { id: 'sysadmin', label: 'System Admin', prefix: 'ADM', scopeType: 'none', scopeLabel: '—' },
+  // ── Arrival & legacy roles (unchanged) ──
+  { id: 'airline', label: 'Airline', prefix: 'AL', scopeType: 'airlineCode', scopeLabel: 'Airline code', arrivalLegacy: true },
+  { id: 'groundhandler', label: 'Ground Handler', prefix: 'GH', scopeType: 'airport', scopeLabel: 'Airport', arrivalLegacy: true },
+  { id: 'accommodation', label: 'Accommodation Receiving Staff', prefix: 'ACC', scopeType: 'hotel', scopeLabel: 'Hotel', arrivalLegacy: true },
+  { id: 'delivery', label: 'Delivery Staff', prefix: 'DLV', scopeType: 'hotel', scopeLabel: 'Hotel', arrivalLegacy: true },
+  // Driver is no longer a login role (departure): drivers are Driver records. Kept for arrival + history only.
+  { id: 'driver', label: 'Driver (legacy)', prefix: 'DRV', scopeType: 'none', scopeLabel: '—', arrivalLegacy: true, retired: true },
 ];
 
 export const MODULES = ['Bookings', 'Scans', 'Bags', 'Exceptions', 'Trucks', 'Manifests', 'Users', 'Config', 'Reports'];
@@ -92,13 +99,15 @@ function buildUsers(masterData) {
       const num = String(seq++).padStart(3, '0');
       const scopeOptions = {
         centre: masterData.centres.map((c) => c.name),
+        area: ['Aziziyah', 'Al-Awali', 'Shisha'],
         warehouse: masterData.warehouses.map((w) => w.name),
         airport: masterData.airports.map((a) => a.code),
         hotel: masterData.hotels.map((h) => h.name),
         airlineCode: ['GA', 'PK', 'BG', 'SV', 'XY'],
         none: [null],
       }[role.scopeType];
-      const disabled = rng() < 0.12;
+      const retired = role.retired === true;
+      const disabled = retired || rng() < 0.12;
       users.push({
         id: `U${num}`,
         employeeId: `${role.prefix}-${num}`,
@@ -109,7 +118,7 @@ function buildUsers(masterData) {
         phone: `+9665${int(10000000, 99999999)}`,
         email: `user${num}@rabel.sa`,
         status: disabled ? 'Disabled' : 'Active',
-        disabledReason: disabled ? pick(['Resigned', 'On leave', 'Policy violation', 'Season ended']) : null,
+        disabledReason: retired ? 'Moved to Driver records' : (disabled ? pick(['Resigned', 'On leave', 'Policy violation', 'Season ended']) : null),
         twoFA: rng() < 0.7,
         lastLogin: rng() < 0.85 ? hoursAgo(int(1, 400)) : null,
         pin: String(int(1000, 9999)),

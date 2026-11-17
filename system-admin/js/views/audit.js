@@ -6,7 +6,7 @@ import { createDataTable } from '../components/data-table.js';
 import { statusChip } from '../components/status-chip.js';
 
 const ROLE_LABELS = [
-  'Check-in Staff', 'Warehouse Staff', 'Driver', 'Airport Coordinator', 'Airline',
+  'Check-in Staff', 'Warehouse Manager', 'Transport Staff', 'Airport Coordinator', 'Airline',
   'Ground Handler', 'Accommodation Receiving Staff', 'Delivery Staff', 'Operations Manager', 'System Admin',
 ];
 const ACTIONS = [

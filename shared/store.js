@@ -1,0 +1,65 @@
+/**
+ * Shared v7 store: ONE localStorage key used by every departure app
+ * (same origin), so check-in → transport → warehouse → airport share data.
+ * Arrival apps keep their own `rabel_ui_*` stores and are untouched.
+ */
+import { runMigrations } from './migrations/index.js';
+import { ensureBaseAccounts } from './seed/baseAccounts.js';
+
+export const STORE_KEY = 'rabel_v7';
+
+/** @returns {object} an empty, unmigrated state (version 0) */
+export function createEmptyState() { return { __v: 0 }; }
+
+/** @param {object|null} existing @param {{storage?:any, baseAccounts?:boolean}} ctx */
+function boot(existing, ctx) {
+  const state = existing && typeof existing === 'object' ? existing : createEmptyState();
+  runMigrations(state, ctx);
+  return ctx.baseAccounts ? ensureBaseAccounts(state) : state;
+}
+
+/**
+ * @param {{ storage?: {getItem:Function,setItem:Function}|null, key?: string, baseAccounts?: boolean }} [opts]
+ * Storage is injectable so tests (and node) can use an in-memory one.
+ * `baseAccounts: true` also upserts the demo accounts/areas (browser default).
+ */
+export function createStore(opts = {}) {
+  const storage = opts.storage ?? null;
+  const key = opts.key || STORE_KEY;
+  const baseAccounts = !!opts.baseAccounts;
+  let state = null;
+
+  function readRaw() {
+    try {
+      const raw = storage?.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  function writeRaw() {
+    try { storage?.setItem(key, JSON.stringify(state)); } catch { /* quota / private mode: keep working in memory */ }
+  }
+
+  return {
+    /** @returns {object} the live state (loaded + migrated on first call) */
+    get() {
+      if (!state) { state = boot(readRaw(), { storage, baseAccounts }); writeRaw(); }
+      return state;
+    },
+    save() { if (state) writeRaw(); },
+    /** Drops v7 data and rebuilds from scratch (old per-app keys are re-imported, never deleted). */
+    reset() { state = boot(null, { storage, baseAccounts }); writeRaw(); return state; },
+    /** Replace state wholesale (used by the seed). */
+    replace(next) { state = next; writeRaw(); return state; },
+  };
+}
+
+let defaultStore = null;
+/** Browser singleton bound to window.localStorage (falls back to memory). */
+export function getStore() {
+  if (!defaultStore) {
+    let storage = null;
+    try { storage = typeof window !== 'undefined' ? window.localStorage : null; } catch { storage = null; }
+    defaultStore = createStore({ storage, baseAccounts: true });
+  }
+  return defaultStore;
+}

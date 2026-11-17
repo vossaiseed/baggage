@@ -12,7 +12,6 @@ import * as dashboardView from './views/dashboard.js';
 import * as depIncomingView from './views/dep-incoming.js';
 import * as depGateView from './views/dep-gate.js';
 import * as depReceivingView from './views/dep-receiving.js';
-import * as depAirlineView from './views/dep-airline.js';
 import * as arrFlightsView from './views/arr-flights.js';
 import * as arrReceivingView from './views/arr-receiving.js';
 import * as arrSecurityView from './views/arr-security.js';
@@ -29,7 +28,6 @@ const NAV_GROUPS = [
     items: [
       { hash: '#/dep/incoming', match: '/dep/incoming', label: 'Incoming trucks', iconName: 'truck' },
       { hash: '#/dep/gate', match: '/dep/gate', label: 'Gate & holds', iconName: 'shield-alert' },
-      { hash: '#/dep/airline', match: '/dep/airline', label: 'Airline handover', iconName: 'plane-takeoff' },
     ],
   },
   {
@@ -338,8 +336,6 @@ function registerRoutes() {
   route('/dep/incoming', wrapView(depIncomingView));
   route('/dep/gate', wrapView(depGateView));
   route('/dep/receiving/:id', wrapView(depReceivingView));
-  route('/dep/airline', wrapView(depAirlineView));
-  route('/dep/airline/:batchId', wrapView(depAirlineView));
   route('/arr/flights', wrapView(arrFlightsView));
   route('/arr/flights/:id', wrapView(arrFlightsView));
   route('/arr/receiving/:id', wrapView(arrReceivingView));
@@ -360,6 +356,9 @@ function registerRoutes() {
   });
 
   setGuard((path) => {
+    // v7: the Airline / Ground Handler module is out of the departure flow. Handover is to the
+    // Airport Authority (SGS) — built in Phase 6. The old airline-handover screen stays as code only.
+    if (path === '/dep/airline' || path.startsWith('/dep/airline/')) return '#/dep/incoming';
     if (path !== '/login' && !isAuthed()) return '#/login';
     if (path === '/login' && isAuthed()) return '#/';
     return true;

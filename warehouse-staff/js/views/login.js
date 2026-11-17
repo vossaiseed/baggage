@@ -4,11 +4,11 @@ import { navigate } from '../router.js';
 import { setWorkstation } from '../store.js';
 
 const DEMO_ACCOUNTS = [
-  { label: 'Faisal', employeeId: 'WH-001', pin: '1234' },
-  { label: 'Imran', employeeId: 'WH-002', pin: '1234' },
+  { label: 'Faisal', employeeId: 'WM-001', pin: '1234' },
+  { label: 'Imran', employeeId: 'WM-002', pin: '1234' },
 ];
 
-const WORKSTATIONS = ['Gate', 'Unloading Bay', 'Screening', 'Storage', 'Outbound'];
+const WORKSTATIONS = ['Gate', 'Unloading Bay', 'Screening', 'Outbound'];
 
 /** @param {object} params @param {HTMLElement} app */
 export function render(params, app) {
@@ -19,13 +19,13 @@ export function render(params, app) {
           <span class="brand-name fs-xl">Rabel</span>
           <span class="brand-ar">رابل — خدمة أمتعة الحجاج</span>
         </div>
-        <h1 class="fs-lg">Warehouse Staff sign in</h1>
+        <h1 class="fs-lg">Warehouse Manager sign in</h1>
         <p class="muted fs-sm" style="margin-block-end:var(--s5)">Rabel Central Warehouse — Makkah</p>
         <div id="login-alert" role="alert"></div>
         <form id="login-form" novalidate>
           <div class="field">
             <label for="employeeId">Employee ID <span class="req">*</span></label>
-            <input id="employeeId" name="employeeId" type="text" autocomplete="username" placeholder="WH-001" required />
+            <input id="employeeId" name="employeeId" type="text" autocomplete="username" placeholder="WM-001" required />
             <div class="error" id="err-employeeId" hidden></div>
           </div>
           <div class="field">
