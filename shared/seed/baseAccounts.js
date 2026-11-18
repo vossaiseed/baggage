@@ -4,13 +4,26 @@
  * it never overwrites data imported from the old stores or edited by users.
  * The full demo scenario seed (flights, travelers, tags …) comes in Phase 7.
  */
-import { makeUser } from '../models.js';
+import { makeUser, makeDriver, makeTruck } from '../models.js';
 import { ROLE } from '../constants.js';
 
 export const BASE_AREAS = Object.freeze([
   { id: 'AREA-AZIZIYAH', name: 'Aziziyah', district: 'Aziziyah', lat: 21.4225, lng: 39.8750 },
   { id: 'AREA-AL-AWALI', name: 'Al-Awali', district: 'Al-Awali', lat: 21.3856, lng: 39.8400 },
   { id: 'AREA-SHISHA', name: 'Shisha', district: 'Shisha', lat: 21.4000, lng: 39.8900 },
+]);
+
+/** Demo fleet for the Transport Manager's Drivers/Trucks screens (Phase 4). */
+export const BASE_DRIVERS = Object.freeze([
+  { id: 'DRV-001', name: 'Hamza Qureshi', phone: '+966500000101', license_no: 'SA-DL-10001' },
+  { id: 'DRV-002', name: 'Idris Mwangi', phone: '+966500000102', license_no: 'SA-DL-10002' },
+  { id: 'DRV-003', name: 'Tariq Siddiqui', phone: '+966500000103', license_no: 'SA-DL-10003' },
+]);
+
+export const BASE_TRUCKS = Object.freeze([
+  { id: 'TRK-001', plate_no: 'RBL 1001', capacity_bags: 80 },
+  { id: 'TRK-002', plate_no: 'RBL 1002', capacity_bags: 80 },
+  { id: 'TRK-003', plate_no: 'RBL 1003', capacity_bags: 60 },
 ]);
 
 const U = (id, name, role, extra = {}) => ({ id, employee_id: id, name, role, ...extra });
@@ -39,6 +52,8 @@ export function ensureBaseAccounts(state) {
   }
   if (!state.warehouses.some((w) => w.id === 'WH-MAKKAH')) state.warehouses.push({ id: 'WH-MAKKAH', name: 'Rabel Central Warehouse — Makkah' });
   if (!state.airports.some((a) => a.id === 'JED')) state.airports.push({ id: 'JED', code: 'JED', name: 'King Abdulaziz International' });
+  for (const d of BASE_DRIVERS) if (!state.drivers.some((x) => x.id === d.id)) state.drivers.push(makeDriver(d));
+  for (const t of BASE_TRUCKS) if (!state.trucks.some((x) => x.id === t.id)) state.trucks.push(makeTruck(t));
   for (const b of BASE_USERS) {
     const cur = state.users.find((u) => u.id === b.id || u.employee_id === b.employee_id);
     if (!cur) state.users.push(makeUser(b));

@@ -48,5 +48,17 @@ Who sets what is derived from the presets (`bag:advance:<status>`): Backend (Dat
 * **Backend side**: Damaged Tag requests (`requestDamagedTag`) appear in Backend → Tags with "Void & replace" (closes the request); extra-bag requests → `tagService.issueExtraBagTags`.
 * Check-in login now authenticates against the shared users (`authenticate`); counters, centres, appointments are gone from the UI.
 
+## Phase 4 additions (Transport: dispatch + Collection trips)
+* **New app** `transport/` — one console, two roles sharing it by session role: Transport Manager (home `/`: Dispatch · Staff · Drivers · Trucks · Window board · Reports) and Transport Staff (home `/trips`: Collection trips · Airport trips). Login accepts both `TM-xxx` and `TS-xxx`; the router guards each role to its own path set.
+* **`shared/services/transportService.js`** — the only place driver/truck/trip state changes:
+  * Fleet: `listDrivers`/`createDriver`/`setDriverStatus`, `listTrucks`/`createTruck`/`setTruckStatus` (a `Busy` resource must be rerouted off its trip before it can be set `Off duty`).
+  * `windowBoard` — read-only per-area rows (pending pickups, flight priority via `forecast()`, worst `computeAlerts()` level amber/red) for both the Manager's Window board and the Dispatch screen.
+  * `dispatchCollectionTrip(state, areaId, {driverId, truckId}, ctx)` — one active trip per area at a time; creates a `Trip` (`type: 'Collection'`), marks the driver/truck `Busy`, notifies the area's Transport Staff.
+  * Collection trip lifecycle (Transport Staff, scoped to their own area via `rbac` `scope: 'area'`): `loadCollectionTrip` (count match against check-in's `handed_bag_ids` log — **not** just any "Checked-in" bag — a mismatch raises a `Count Mismatch` exception and blocks the load; a match advances every bag `Checked-in → Loaded to Collection Truck` via `bagService.advanceBag` and clears `area.pending_pickups`) → `departTrip` (→ En Route, notifies the Warehouse Manager) → `arriveAtWarehouse` (→ Arrived, frees the driver/truck back to `Available`).
+  * `rerouteTrip` — swaps the driver and/or truck on an active trip (reason required; the replaced resource goes `Off duty`); logged to `rerouteLogs`.
+  * `reportSummary` — trips dispatched/completed, bags moved, average pickup-to-warehouse time, reroutes.
+* **Data model**: `Driver` (`DRV-xxx`), `Truck` (`TRK-xxx`), `Trip` (`shared/models.js` `makeDriver`/`makeTruck`/`makeTrip`; `TRIP_STATUSES` in `shared/constants.js`). Demo fleet seeded in `shared/seed/baseAccounts.js` (`BASE_DRIVERS`/`BASE_TRUCKS`), 3 of each, alongside `TM-001` and `TS-001`/`TS-002` (one per collection area).
+* **Airport trips are a placeholder in Phase 4**: the Staff "Airport trips" tab exists (route + menu item, per the role map) but shows "no airport trips yet" — real wiring arrives in Phase 6 once Warehouse (Phase 5) can set `Loaded to Airport Truck`. The `Trip` model already carries `warehouse_id`/`airport_id` for that.
+
 ## Status of the v7 rollout
-See `docs/v7-departure-plan.md`. Phases 1 (foundation), 2 (Traveler + Backend) and 3 (Check-in + scanner) done. Phases 4–7: Transport, Warehouse, Airport, Ops/Monitor/Admin/seed/e2e.
+See `docs/v7-departure-plan.md`. Phases 1 (foundation), 2 (Traveler + Backend), 3 (Check-in + scanner) and 4 (Transport: dispatch + Collection trips) done. Phases 5–7: Warehouse, Airport, Ops/Monitor/Admin/seed/e2e.

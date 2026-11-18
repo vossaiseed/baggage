@@ -60,6 +60,8 @@ export const BAG_TAG_STATUSES = Object.freeze(['Imported', 'Assigned', 'Released
 export const DRIVER_STATUSES = Object.freeze(['Available', 'Busy', 'Off duty']);
 export const TRUCK_STATUSES = Object.freeze(['Available', 'Busy', 'Rerouting', 'Off duty']);
 export const TRIP_TYPES = Object.freeze(['Collection', 'Airport', 'Return']);
+/** Collection-trip lifecycle (Phase 4). Airport/Return trips are introduced in Phase 6. */
+export const TRIP_STATUSES = Object.freeze(['Dispatched', 'Loaded', 'En Route', 'Arrived', 'Cancelled']);
 export const SCAN_METHODS = Object.freeze(['HANDHELD', 'CAMERA', 'MANUAL']);
 export const SCAN_RESULTS = Object.freeze(['OK', 'DUPLICATE', 'UNKNOWN', 'WRONG_FLIGHT', 'WRONG_STEP', 'INVALID_FORMAT']);
 

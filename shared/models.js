@@ -56,6 +56,41 @@ export function makeBag(p = {}) {
   };
 }
 
+/** @param {{id?:string,name?:string,phone?:string,license_no?:string,status?:string,truck_id?:string|null,area_id?:string|null,created_at?:string}} [p] */
+export function makeDriver(p = {}) {
+  return {
+    id: p.id, name: p.name, phone: p.phone ?? null, license_no: p.license_no ?? null,
+    status: p.status || 'Available', truck_id: p.truck_id ?? null, area_id: p.area_id ?? null,
+    created_at: p.created_at || new Date().toISOString(),
+  };
+}
+
+/** @param {{id?:string,plate_no?:string,capacity_bags?:number,status?:string,driver_id?:string|null,created_at?:string}} [p] */
+export function makeTruck(p = {}) {
+  return {
+    id: p.id, plate_no: p.plate_no || p.id, capacity_bags: p.capacity_bags ?? 80,
+    status: p.status || 'Available', driver_id: p.driver_id ?? null,
+    created_at: p.created_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * A truck run. Collection: area_from -> warehouse_id. Airport (Phase 6): warehouse_id -> airport_id.
+ * @param {{id?:string,type?:string,status?:string,area_from?:string|null,area_to?:string|null,warehouse_id?:string|null,airport_id?:string|null,driver_id?:string|null,truck_id?:string|null,bag_ids?:string[],expected_count?:number|null,dispatched_at?:string,loaded_at?:string|null,departed_at?:string|null,arrived_at?:string|null,note?:string|null}} [p]
+ */
+export function makeTrip(p = {}) {
+  return {
+    id: p.id, type: p.type, status: p.status || 'Dispatched',
+    area_from: p.area_from ?? null, area_to: p.area_to ?? null,
+    warehouse_id: p.warehouse_id ?? null, airport_id: p.airport_id ?? null,
+    driver_id: p.driver_id ?? null, truck_id: p.truck_id ?? null,
+    bag_ids: p.bag_ids || [], expected_count: p.expected_count ?? null,
+    dispatched_at: p.dispatched_at || new Date().toISOString(),
+    loaded_at: p.loaded_at ?? null, departed_at: p.departed_at ?? null, arrived_at: p.arrived_at ?? null,
+    note: p.note ?? null,
+  };
+}
+
 /**
  * @param {object} p
  * @returns {object} User
