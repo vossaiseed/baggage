@@ -39,21 +39,45 @@ function row(r) {
   </div>`;
 }
 
+/**
+ * Airport runs (Phase 5): the warehouse screens bags and asks for a truck; the Manager dispatches one
+ * here. The warehouse then loads it and closes the load; driving it is Phase 6.
+ */
+function airportRow(wh) {
+  const waiting = S().bags.filter((b) => b.warehouse_id === wh.id && b.status === 'Screened').length;
+  const open = S().trips.filter((t) => t.type === 'Airport' && t.warehouse_id === wh.id && ['Dispatched', 'Loaded', 'En Route'].includes(t.status));
+  if (!waiting && !open.length) return '';
+  return `<div class="board-row">
+    <div class="board-top"><strong>${esc(wh.name)}</strong>
+      <span class="row gap-2 wrap"><span class="fs-sm muted">${waiting} screened bag(s) waiting for the airport</span></span></div>
+    ${open.length ? `<ul class="stack gap-2">${open.map(tripLine).join('')}</ul>` : ''}
+    ${waiting > 0 && !open.length ? `
+      <form class="row gap-2 wrap" data-airport="${esc(wh.id)}">
+        <select name="driverId" aria-label="Driver">${S().drivers.filter((d) => d.status === 'Available').map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('') || '<option value="">No driver available</option>'}</select>
+        <select name="truckId" aria-label="Truck">${S().trucks.filter((t) => t.status === 'Available').map((t) => `<option value="${esc(t.id)}">${esc(t.id)} (${t.capacity_bags} bags)</option>`).join('') || '<option value="">No truck available</option>'}</select>
+        <button type="submit" class="btn btn-primary">Dispatch airport truck</button>
+      </form>` : ''}
+  </div>`;
+}
+
 function draw() {
   if (!el) return;
   let board;
   try { board = tr.windowBoard(S(), user(), { now: Date.now() }); }
   catch (err) { el.innerHTML = `<div class="state-block error-state"><p>${esc(err.message)}</p></div>`; return; }
-  const summary = tr.reportSummary(S(), {});
+  // Collection *and* airport runs (reportSummary only covers collection trips).
+  const activeTrips = S().trips.filter((t) => ['Dispatched', 'Loaded', 'En Route'].includes(t.status)).length;
   el.innerHTML = `
     <div class="page-header"><div><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Pending pickups by collection area — assign a driver and truck</p></div></div>
     <div class="kpi-grid">
       <div class="tile"><span class="n">${board.reduce((n, r) => n + r.pendingPickups, 0)}</span><span class="l">Bags waiting for pickup</span></div>
-      <div class="tile ${summary.tripsActive ? 'warn' : 'ok'}"><span class="n">${summary.tripsActive}</span><span class="l">Active trips</span></div>
+      <div class="tile ${activeTrips ? 'warn' : 'ok'}"><span class="n">${activeTrips}</span><span class="l">Active trips</span></div>
       <div class="tile"><span class="n">${S().drivers.filter((d) => d.status === 'Available').length}</span><span class="l">Drivers available</span></div>
       <div class="tile"><span class="n">${S().trucks.filter((t) => t.status === 'Available').length}</span><span class="l">Trucks available</span></div>
     </div>
-    <div class="stack gap-3">${board.map(row).join('')}</div>`;
+    <div class="stack gap-3">${board.map(row).join('')}</div>
+    ${S().warehouses.map(airportRow).join('').trim() ? `<h2 class="section-title" style="margin-block-start:var(--s6)">Airport runs</h2>
+      <div class="stack gap-3">${S().warehouses.map(airportRow).join('')}</div>` : ''}`;
 
   el.querySelectorAll('[data-dispatch]').forEach((form) => form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -61,6 +85,13 @@ function draw() {
     const driverId = fd.get('driverId'); const truckId = fd.get('truckId');
     if (!driverId || !truckId) return;
     run((s, c) => tr.dispatchCollectionTrip(s, form.dataset.dispatch, { driverId, truckId }, c), 'Trip dispatched.', draw);
+  }));
+  el.querySelectorAll('[data-airport]').forEach((form) => form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const driverId = fd.get('driverId'); const truckId = fd.get('truckId');
+    if (!driverId || !truckId) return;
+    run((s, c) => tr.dispatchAirportTrip(s, { warehouseId: form.dataset.airport, driverId, truckId }, c), 'Airport truck dispatched to the warehouse.', draw);
   }));
   el.querySelectorAll('[data-reroute]').forEach((b) => b.addEventListener('click', () => openReroute(b.dataset.reroute)));
 }

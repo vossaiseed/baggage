@@ -181,6 +181,40 @@ export function dispatchCollectionTrip(state, areaId, input, ctx) {
   return trip;
 }
 
+/**
+ * Assign a driver + truck for the warehouse → airport run. The Warehouse Manager asks for a truck
+ * (`warehouseService.requestAirportTruck`); the Manager dispatches it here, then the warehouse loads
+ * screened bags onto it ("Loaded to Airport Truck"). Departing / arriving at the airport is Phase 6.
+ * @param {object} state @param {{warehouseId:string, driverId:string, truckId:string, airportId?:string}} input @param {object} ctx
+ */
+export function dispatchAirportTrip(state, input, ctx) {
+  assertCan(ctx.user, 'dispatch:assign');
+  const warehouseId = input?.warehouseId;
+  if (!state.warehouses.some((w) => w.id === warehouseId)) throw new ServiceError('NOT_FOUND', `Warehouse ${warehouseId} not found.`);
+  const waiting = state.bags.filter((b) => b.warehouse_id === warehouseId && b.status === 'Screened').length;
+  if (waiting === 0) throw new ServiceError('NOTHING_TO_LOAD', 'No screened bags are waiting at this warehouse.');
+  if (state.trips.some((t) => t.type === 'Airport' && t.warehouse_id === warehouseId && ACTIVE_TRIP_STATUSES.includes(t.status))) {
+    throw new ServiceError('ALREADY_DISPATCHED', 'An airport truck is already open at this warehouse.');
+  }
+  const driver = findDriver(state, input.driverId);
+  if (driver.status !== 'Available') throw new ServiceError('DRIVER_BUSY', `${driver.name} is not available.`);
+  const truck = findTruck(state, input.truckId);
+  if (truck.status !== 'Available') throw new ServiceError('TRUCK_BUSY', `${truck.id} is not available.`);
+
+  const at = nowIso(ctx);
+  const trip = makeTrip({
+    id: `TRIP-${String(nextCounter(state, 'trip')).padStart(6, '0')}`, type: 'Airport', status: 'Dispatched',
+    warehouse_id: warehouseId, airport_id: input.airportId || state.airports[0]?.id || null,
+    driver_id: driver.id, truck_id: truck.id, expected_count: waiting, dispatched_at: at,
+  });
+  state.trips.push(trip);
+  driver.status = 'Busy'; driver.truck_id = truck.id;
+  truck.status = 'Busy'; truck.driver_id = driver.id;
+  notify(state, { role: 'warehouse_manager', title: `Airport truck ${truck.id} is at the dock`, body: `${driver.name} is ready to load for the airport run.`, link: '#/loading' }, ctx);
+  audit(state, ctx, { action: 'trip.dispatch_airport', entity: 'Trip', entityId: trip.id, after: { warehouse_id: warehouseId, driver_id: driver.id, truck_id: truck.id, expected_count: waiting } });
+  return trip;
+}
+
 /* ───────────────────────── Collection trip flow (Transport Staff) ───────────────────────── */
 
 export function listMyTrips(state, user, { includeDone = false } = {}) {

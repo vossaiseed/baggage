@@ -6,3 +6,39 @@
 
 .scan-highlight{animation:scan-flash 2s ease-out}
 @keyframes scan-flash{0%{background:var(--accent-soft)}100%{background:transparent}}
+
+/* ===== Departure v7 (Monitor · Receiving · Screening · Loading · Holding) ===== */
+
+/* spacing helpers used by the v7 screens */
+.mb{margin-block-end:var(--s4)} .mt{margin-block-start:var(--s4)}
+
+/* numeric table cells line up under their headings */
+td.num,th.num{text-align:end;font-variant-numeric:tabular-nums}
+
+/* clickable monitor tiles, tinted by how urgent the queue is */
+.kpi-tile{display:flex;flex-direction:column;gap:var(--s1);border-inline-start:4px solid var(--border-strong)}
+.kpi-tile.ok{border-inline-start-color:var(--success)}
+.kpi-tile.warn{border-inline-start-color:var(--warning)}
+.kpi-tile.bad{border-inline-start-color:var(--danger)}
+.kpi-tile:hover{box-shadow:var(--shadow-2)}
+
+/* window / warehouse-timer wording takes the alert colour */
+.level-amber{color:var(--warning);font-weight:var(--fw-semibold)}
+.level-red{color:var(--danger);font-weight:var(--fw-semibold)}
+
+/* the scanner sits inside a card: let it fill the width without doubling the frame */
+.card .rs-scanner{border-width:1px}
+
+/* Plain v7 tables (rows are not clickable, so they don't use .data-table's pointer affordance) */
+.table-wrap > table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+.table-wrap > table thead th{
+  text-align:start;padding:var(--s3);background:var(--surface-2);color:var(--muted);
+  font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.table-wrap > table td{padding:var(--s3);border-bottom:1px solid var(--border);vertical-align:middle}
+.table-wrap > table tbody tr:last-child td{border-bottom:none}
+.table-wrap > table tbody tr:hover{background:var(--surface-2)}
+
+/* selection checkboxes inside tables (the global input height is sized for text fields) */
+.table-wrap > table input[type="checkbox"]{width:20px;height:20px;min-height:0;margin:0;accent-color:var(--accent)}

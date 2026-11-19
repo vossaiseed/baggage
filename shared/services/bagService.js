@@ -200,3 +200,32 @@ export function returnToTraveler(state, bagId, ctx = {}) {
   audit(state, ctx, { action: 'bag.return', entity: 'Bag', entityId: bag.id, before: { status: before }, after: { status: bag.status }, note: ctx.note });
   return bag;
 }
+
+/**
+ * A rebooked bag that Backend has re-tagged re-enters the line at "Tag Assigned" — but it is already
+ * physically in the warehouse, so it must not be driven through Checked-in … Received at Warehouse a
+ * second time. The Warehouse Manager releases it back to the stage it was held from
+ * ("Received at Warehouse" → screen it again; "Screened" or beyond → straight back to loading, capped
+ * at "Screened" because it has to go onto a truck again anyway). A bag held before it ever reached the
+ * warehouse takes the normal steps. `advanceBag` stays strictly one step; this is the only way to
+ * re-enter the line further along.
+ * @param {object} state @param {string} bagId @param {{user?:object, now?:any, note?:string, system?:boolean}} ctx
+ * @returns {object} the bag, now back on the main line
+ */
+export function releaseRebookedToLoading(state, bagId, ctx = {}) {
+  const bag = getBag(state, bagId);
+  authorize(ctx, 'bag:release_to_loading', bag);
+  if (bag.status !== 'Tag Assigned') throw new BagStateError('INVALID_TRANSITION', `This bag is "${bag.status}"; only a re-tagged rebooked bag can be released to loading.`);
+  if (bag.retag_required || !(bag.previous_tags || []).length) throw new BagStateError('INVALID_TRANSITION', 'This bag has not been rebooked and re-tagged by Backend.');
+  const heldFrom = statusIndex(bag.held_from_status || '');
+  if (heldFrom < statusIndex('Received at Warehouse')) {
+    throw new BagStateError('INVALID_TRANSITION', `This bag was only "${bag.held_from_status || 'unknown'}" when it was held — it must go through the normal steps.`);
+  }
+  const to = BAG_STATUSES[Math.min(heldFrom, statusIndex('Screened'))];
+  const at = nowIso(ctx);
+  const before = bag.status;
+  bag.released_to_loading_at = at;
+  record(bag, to, ctx, at, { reason: `Rebooked bag released back to "${to}" (held from "${bag.held_from_status}")` });
+  audit(state, ctx, { action: 'bag.release_to_loading', entity: 'Bag', entityId: bag.id, before: { status: before }, after: { status: bag.status }, note: ctx.note });
+  return bag;
+}

@@ -36,6 +36,7 @@ export const BASE_USERS = Object.freeze([
   U('TS-001', 'Hamza', ROLE.TRANSPORT_STAFF, { area_id: 'AREA-AZIZIYAH' }),
   U('TS-002', 'Idris', ROLE.TRANSPORT_STAFF, { area_id: 'AREA-AL-AWALI' }),
   U('WM-001', 'Faisal', ROLE.WAREHOUSE_MANAGER, { warehouse_id: 'WH-MAKKAH', legacy_id: 'WH-001' }),
+  U('WM-002', 'Imran', ROLE.WAREHOUSE_MANAGER, { warehouse_id: 'WH-MAKKAH', legacy_id: 'WH-002' }),
   U('BE-001', 'Khalid', ROLE.BACKEND),
   U('APC-001', 'Salman', ROLE.AIRPORT_COORDINATOR, { airport_id: 'JED' }),
   U('MON-001', 'Noor', ROLE.WINDOW_MONITOR),

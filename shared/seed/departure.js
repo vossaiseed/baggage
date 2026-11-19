@@ -14,7 +14,7 @@ import { advanceBag } from '../services/bagService.js';
 import { issueInternalLabel } from '../services/tagService.js';
 import { nextCounter } from '../services/audit.js';
 
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 const H = 3600e3;
 
 export const SEED_AIRLINES = Object.freeze([
@@ -124,7 +124,10 @@ function seedCancelledFlightBags(state, now) {
   if (!flight) return;
   const wh = 'WH-MAKKAH';
   let lpnSerial = 1;
-  for (const t of state.travelers.filter((x) => x.flight_id === flight.id)) {
+  // Only v7 travelers get seeded bags — a pre-v7 (legacy) traveler has no residence and must never
+  // gain brand-new v7 bags, or the warehouse/holding screens show phantom bags in browsers that
+  // still carry the old per-app stores.
+  for (const t of state.travelers.filter((x) => x.flight_id === flight.id && !x.legacy)) {
     if (state.bags.some((b) => b.traveler_id === t.id)) continue;
     t.data_verified = true;
     t.boarding_pass_verified = true;
