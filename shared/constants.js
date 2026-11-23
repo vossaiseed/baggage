@@ -53,8 +53,10 @@ export const ROLE = Object.freeze({
 export const FLIGHT_STATUSES = Object.freeze(['Scheduled', 'New', 'Cancelled', 'Rebooked', 'Completed']);
 
 export const ASSIGNMENT_STATUSES = Object.freeze([
-  'Assigned', 'En Route', 'Arrived', 'Collected', 'Handed to Transport', 'Traveler Absent', 'Rescheduled',
+  'Assigned', 'En Route', 'Arrived', 'Collected', 'Handed to Transport', 'Traveler Absent', 'Rescheduled', 'Cancelled',
 ]);
+/** A collection that has not happened yet — these are the ones a flight cancellation calls off. */
+export const PRE_COLLECTION_ASSIGNMENT_STATUSES = Object.freeze(['Assigned', 'En Route', 'Arrived', 'Rescheduled']);
 
 export const BAG_TAG_STATUSES = Object.freeze(['Imported', 'Assigned', 'Released', 'Attached', 'Scanned', 'Void']);
 export const DRIVER_STATUSES = Object.freeze(['Available', 'Busy', 'Off duty']);
@@ -71,6 +73,12 @@ export const EXCEPTION_TYPES_V7 = Object.freeze([
   'Invalid Tag Format', 'Duplicate Tag', 'Tag Not Released', 'Wrong Flight Tag', 'Damaged Tag',
   'Seal Broken', 'SGS Voucher Mismatch', 'Manifest Gap',
 ]);
+
+/** Exception lifecycle. Ops is the only role that moves an exception past "Open". */
+export const EXCEPTION_STATUSES = Object.freeze(['Open', 'Assigned', 'Escalated', 'Resolved', 'Closed']);
+/** Still needs work — `raiseException` dedupes against these, and they are what the Ops queue shows. */
+export const OPEN_EXCEPTION_STATUSES = Object.freeze(['Open', 'Assigned', 'Escalated']);
+export const EXCEPTION_SEVERITIES = Object.freeze(['Low', 'Medium', 'High', 'Critical']);
 
 /** Time rules (hours / minutes). The 12 h window ends at the baggage cut-off. */
 export const WINDOW = Object.freeze({

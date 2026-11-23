@@ -9,11 +9,14 @@
     "lint": "eslint shared tests scripts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "test:browser": "playwright test",
     "build": "node scripts/build-check.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "seed:departure": "node scripts/seed-departure.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run seed:departure"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.20.5",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",

@@ -57,13 +57,41 @@ export function createStore(opts = {}) {
   };
 }
 
+/**
+ * `?seed=departure` on any departure app rebuilds the demo store — the URL form of the Ops/Admin
+ * "Reset demo data" action, for starting a demo from a clean slate.
+ * @returns {boolean} is the parameter on this URL?
+ */
+function hasSeedParam() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return false;
+    return new URL(window.location.href).searchParams.get('seed') === 'departure';
+  } catch { return false; }
+}
+
+/** Strip it, so a refresh does not wipe the demo a second time. */
+function stripSeedParam() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('seed');
+    window.history?.replaceState?.(null, '', url.toString());
+  } catch { /* no history API: the parameter simply stays in the bar */ }
+}
+
 let defaultStore = null;
 /** Browser singleton bound to window.localStorage (falls back to memory). */
 export function getStore() {
   if (!defaultStore) {
     let storage = null;
     try { storage = typeof window !== 'undefined' ? window.localStorage : null; } catch { storage = null; }
+    const fresh = hasSeedParam();
     defaultStore = createStore({ storage, baseAccounts: true });
+    if (fresh) { defaultStore.reset(); stripSeedParam(); } else defaultStore.get();
   }
   return defaultStore;
 }
+
+// A `?seed=departure` demo link must take effect the moment any departure app loads, even on a
+// login screen that would not otherwise read the store. This is the only case where importing
+// this module does anything by itself.
+if (hasSeedParam()) getStore();

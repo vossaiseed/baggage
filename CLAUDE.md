@@ -2,7 +2,10 @@
 
 Static, zero-build, vanilla-JS suite of role apps (one folder per app, hash router, mock `api.js` over `localStorage`).
 Needs an HTTP server (ES modules): `npm run dev` → http://localhost:5173. Quality gates: `npm run check`
-(= `lint` + `typecheck` + `test` + `build`; `build` is `scripts/build-check.mjs`, which verifies every import/asset resolves).
+(= `lint` + `typecheck` + `test` + `build` + `seed:departure`; `build` is `scripts/build-check.mjs`, which verifies every
+import/asset resolves; `seed:departure` builds the demo in Node and checks `shared/seed/validate.js`'s invariants).
+`npm run test:browser` runs the Playwright checks against the Chrome already installed — kept out of `check` so the gates
+still pass where no browser exists.
 
 * Departure v7 lives in the **shared layer** `shared/` (pure ES modules, unit-tested in `tests/unit/`).
 * Arrival apps (`accommodation-receiving-staff`, `delivery-staff`, `driver`, `/arr/*` and `/arrival/*` routes) are **unchanged** and keep their own `rabel_ui_*` stores. Do not touch them for departure work.
@@ -74,5 +77,27 @@ Who sets what is derived from the presets (`bag:advance:<status>`): Backend (Dat
 * **`transportService.dispatchAirportTrip`** — the Transport Manager assigns a driver + truck for the warehouse → airport run (one open airport truck per warehouse); it appears under "Airport runs" on the Dispatch screen. Driving it (`In Transit to Airport`) and the Airport Coordinator's screens are Phase 6.
 * **Scan steps** recorded: `WAREHOUSE_TRUCK_QR`, `WAREHOUSE_INTERNAL_LABEL`, `WAREHOUSE_LOAD_LABEL`.
 
+## Phase 6 additions (Airport run + Airport Coordinator)
+* **`shared/services/airportService.js`** — the only place airport state changes: `incomingTrips` / `sealQueue` → `checkSeal` (a broken seal raises `Seal Broken` and blocks the offload until Ops releases it) → `scanBagAtAirport` (internal label once) / `completeOffload` (count match → `Received at Airport`) → `startHandover` / `disputeBag` / `scanDisputedTag` / `completeHandover` (→ `Handed to Airport Authority`, SGS issues a voucher) → `acceptVoucher` (→ `SGS Voucher Accepted`; a short count is `Mismatch`, raises `SGS Voucher Mismatch` and advances only the matching bags). `holdCancelledBags` racks a cancelled flight's bags at the airport.
+* **The SGS manifest is the airline-tag list**, reconciled as a list; only disputed bags are scanned again. `shared/integrations/sgs.js` is the adapter (`state.simulated.voucherDrops[flightId]` demos a mismatch).
+* **`transportService.departForAirport` / `arriveAtAirport`** — the airport run is driven by the one named Transport Staff member on the trip; `In Transit to Airport` is idempotent. The seal belongs to this trip (`seal_no`).
+* `airport-coordinator/` runs on the shared store (`js/v7/*`); pre-v7 departure views are kept as `legacy-dep-*.js`, unimported. `/arr/*` is untouched.
+
+## Phase 7 additions (Ops · Window Monitor · System Admin · seed · e2e)
+* **`shared/services/flightService.js`** — the only place a Flight row changes: `listFlights` / `flightDetail` / `forecastBoard` (24 h, 5-min refresh), `createFlight` / `updateFlight` (moving a cut-off re-derives the window and reports the collections left outside it), `cancelFlight`, `rebookBags`, `closureChecklist` / `closeFlight` / `closedFlights`.
+  * **Cancelling moves no bag.** It sets the status + reason, cancels every collection that has not happened yet (assignment status `Cancelled`, their slots freed) and notifies all eight operational roles plus every affected traveler (in-app + SMS). Bags already in the line appear in the Warehouse Manager's (or Coordinator's) holding queue to be racked — the rack is recorded there, not here.
+  * **Rebooking** takes held bags to a new flight via `bagService.markRebooked` (each needs a NEW tag from Backend); a traveler follows when every bag of theirs moved, and `flight.rebooked_to_flight_id` is recorded once no held bag is left.
+  * **Closure** needs every bag accounted for (`ACCOUNTED_STATUSES`) and no **High/Critical** exception open; lower severities are warnings.
+  * **Pre-v7 (`legacy: true`) bags are excluded from every count** — they cannot move through the v7 line, so they would inflate each flight and block closure forever.
+* **`shared/services/areaService.js`** — collection areas (`createArea` keeps the id on a rename: bags, users and scans point at it) and their 2 h slots: `listSlots`, `setSlotCapacity` (never below what is booked), `generateSlots`. Slot times always come from the flight's 8 h collection window; this service only sets capacity.
+* **`shared/services/exceptionService.js`** — `raiseException` plus the Ops lifecycle: `exceptionQueue` / `exceptionSummary`, `assignException`, `addExceptionNote`, `escalateException` (severity +1, ceiling Critical), `resolveException`, `closeException`, `reopenException`. Statuses in `EXCEPTION_STATUSES`; `OPEN_EXCEPTION_STATUSES` is what dedupe and the queue use. **Only Ops may work an exception off** — every other role can read and raise.
+* **`shared/services/reportService.js`** — `opsReport` (flights and window compliance, check-in, transport, warehouse, airport, exceptions, scans, over a time range), `bagLedger` / `exceptionLedger` / `scanLedger` and `toCsv` (the one CSV writer).
+* **`shared/services/monitorService.js`** — `wallBoard` composes `forecastBoard` + `listAreas` + `exceptionSummary` so the wall can never disagree with a console; `alertOps` is the only write the read-only role may make.
+* **`shared/services/adminService.js`** — `integrationStatus` / `testIntegration` (asks the adapter for something real and records the answer), `listAirlines` / `createAirline` / `updateAirlinePolicy` (a BTIC code added here is what `validateLpn` accepts from then on), `auditTrail` / `auditFacets`, and `resetDemoData(store, ctx)`.
+* **Apps:** `operations-manager/` rebuilt (Flights `/` · Forecast · Exceptions · Areas & slots · Staff · Reports · Closure); new `window-monitor/` (one read-only board, full-screen button, 30 s refresh); `system-admin/` rebuilt (Accounts · Roles · Integrations · Airline policy · Audit; sign-in keeps the 2FA step). Pre-v7 screens in both are guarded to `#/` and kept as `legacy-*.js`, unimported. The **Roles** screen is generated from `ROLE_PRESETS`, so it cannot drift.
+* **Demo data:** "Reset demo data" on Admin → Integrations and Ops → Reports (both hold `demo:reset`), or `?seed=departure` on any departure app (applied as `shared/store.js` loads, then stripped from the URL). `npm run seed:departure` builds and validates the seed in Node; there is deliberately no `departure.seed.json` (cut-offs are relative to "now", so a frozen snapshot would ship stale ones).
+* **Tests:** `tests/e2e/departure-line.test.js` drives one bag through all 13 statuses across every role and asserts the status order, that each step was set by a role `rbac.js` allows, and that every scan carries its method. `tests/e2e/apps.spec.js` (Playwright, `npm run test:browser`) boots all 13 apps with zero console errors, checks the route guards, `?seed=departure`, the cross-app cancel fan-out and that pre-v7 routes still redirect.
+
 ## Status of the v7 rollout
-See `docs/v7-departure-plan.md`. Phases 1 (foundation), 2 (Traveler + Backend), 3 (Check-in + scanner), 4 (Transport: dispatch + Collection trips) and 5 (Warehouse Manager) done. Phases 6–7: Airport run + Coordinator, Ops/Monitor/Admin/seed/e2e.
+See `docs/v7-departure-plan.md`. **All seven phases are done**: 1 foundation · 2 Traveler + Backend · 3 Check-in + scanner · 4 Transport · 5 Warehouse Manager · 6 Airport run + Coordinator · 7 Ops, Window Monitor, System Admin, seed tooling and e2e. 279 unit/e2e tests + 20 browser checks.
+Known gaps, all recorded in the plan's §17: no pull-for-inspection exception type for screening, no airline approval workflow behind an extra bag, and the airline/ground-handler module stays outside the departure flow.

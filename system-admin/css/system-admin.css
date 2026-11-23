@@ -45,3 +45,33 @@
 .handover-summary dd{margin:0 0 var(--s3);font-size:var(--fs-md);font-weight:var(--fw-semibold)}
 
 .unsaved-dot{width:8px;height:8px;border-radius:50%;background:var(--warning);display:inline-block}
+
+/* ===== Departure v7 (Accounts · Roles · Integrations · Airline policy · Audit) ===== */
+
+.mb{margin-block-end:var(--s4)} .mt{margin-block-start:var(--s4)}
+.toolbar{display:flex;gap:var(--s3);flex-wrap:wrap;align-items:center;margin-block-end:var(--s4)}
+.toolbar > input,.toolbar > select{max-width:280px;flex:0 1 240px}
+.toolbar > .checkbox-row{white-space:nowrap}
+.btn-block{width:100%}
+.level-red{color:var(--danger);font-weight:var(--fw-semibold)}
+
+/* Plain v7 tables (rows are not clickable) */
+.table-wrap > table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+.table-wrap > table thead th{
+  text-align:start;padding:var(--s3);background:var(--surface-2);color:var(--muted);
+  font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.table-wrap > table td{padding:var(--s3);border-bottom:1px solid var(--border);vertical-align:top}
+.table-wrap > table tbody tr:last-child td{border-bottom:none}
+.table-wrap > table tbody tr:hover{background:var(--surface-2)}
+.table-wrap > table td.num,.table-wrap > table th.num{text-align:end;font-variant-numeric:tabular-nums}
+
+/* Role and integration cards */
+.role-card,.integration-row{display:flex;flex-direction:column;gap:var(--s3)}
+.perm-list{display:flex;flex-wrap:wrap;gap:6px;margin-block-start:var(--s2)}
+.perm-list code{background:var(--surface-2);border-radius:var(--r-sm);padding:1px 6px;font-size:var(--fs-xs)}
+
+/* The one destructive action in the suite */
+.danger-zone{border-color:var(--danger)}
+.danger-zone .section-title{color:var(--danger)}

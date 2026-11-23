@@ -1,0 +1,79 @@
+/* Window Monitor — a read-only board meant to be left running on a wall screen. */
+
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .brand-name{font-weight:var(--fw-bold);color:var(--accent);font-size:var(--fs-lg)}
+.brand .brand-ar{font-size:10px;color:var(--muted)}
+
+.login-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--surface-2);padding:var(--s4)}
+.login-card{width:100%;max-width:440px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-2);padding:var(--s8) var(--s6)}
+.demo-chip-list{display:flex;flex-wrap:wrap;gap:var(--s2);margin-block-start:var(--s4)}
+.demo-chip{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:4px var(--s3);font-size:var(--fs-xs);color:var(--text-2)}
+.demo-chip:hover{background:var(--accent-soft)}
+.btn-block{width:100%}
+
+/* ===== Shell: no sidebar, the board is the whole screen ===== */
+.wb-shell{display:flex;flex-direction:column;min-height:100vh}
+.wb-topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:var(--s4);
+  padding:var(--s3) var(--s5);background:var(--surface);border-bottom:1px solid var(--border)}
+.wb-shell > main{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s5)}
+
+/* ===== Header band — takes the worst level on the board ===== */
+.wb-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;
+  padding:var(--s5);border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--border);border-inline-start:8px solid var(--success)}
+.wb-head.level-amber{border-inline-start-color:var(--warning);background:var(--warning-soft)}
+.wb-head.level-red{border-inline-start-color:var(--danger);background:var(--danger-soft)}
+.wb-title{font-size:clamp(1.5rem,2.4vw,2.25rem);font-weight:var(--fw-bold);margin:0;line-height:1.1}
+.wb-sub{margin:var(--s1) 0 0;color:var(--muted);font-size:var(--fs-sm)}
+.wb-status{display:flex;gap:var(--s2);flex-wrap:wrap}
+.wb-pill{padding:var(--s2) var(--s4);border-radius:var(--r-pill);font-weight:var(--fw-bold);font-size:var(--fs-base)}
+.wb-pill.red{background:var(--danger);color:#fff}
+.wb-pill.amber{background:var(--warning);color:#3B2600}
+.wb-pill.green{background:var(--success);color:#fff}
+
+/* ===== Flight cards ===== */
+.wb-grid{display:grid;gap:var(--s4);grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.wb-flight{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s5);border-radius:var(--r-lg);
+  background:var(--surface);border:1px solid var(--border);border-inline-start:8px solid var(--success);box-shadow:var(--shadow-1)}
+.wb-flight.level-amber{border-inline-start-color:var(--warning);background:var(--warning-soft)}
+.wb-flight.level-red{border-inline-start-color:var(--danger);background:var(--danger-soft)}
+.wb-flight-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s3);flex-wrap:wrap}
+.wb-code{font-size:clamp(1.25rem,1.8vw,1.75rem);font-weight:var(--fw-bold);letter-spacing:.01em}
+.wb-route{margin-inline-start:var(--s2);color:var(--muted);font-size:var(--fs-sm)}
+.wb-count{text-align:end;display:flex;flex-direction:column}
+.wb-until{font-family:var(--mono);font-size:clamp(1rem,1.4vw,1.375rem);font-weight:var(--fw-bold)}
+.wb-cutoff{font-size:var(--fs-xs);color:var(--muted)}
+
+.wb-bar{display:flex;height:14px;border-radius:var(--r-pill);overflow:hidden;background:var(--surface-2)}
+.wb-bar > span{display:block}
+.wb-bar .seg-declared{background:var(--border)}
+.wb-bar .seg-moving{background:var(--accent)}
+.wb-bar .seg-airport{background:#0891B2}
+.wb-bar .seg-done{background:var(--success)}
+.wb-bar .seg-side{background:var(--warning)}
+.wb-bar .seg-empty{background:var(--surface-2)}
+
+.wb-nums{display:flex;flex-wrap:wrap;gap:var(--s3);font-size:var(--fs-sm);color:var(--text-2);align-items:center}
+.wb-nums b{font-size:var(--fs-lg);font-weight:var(--fw-bold);color:var(--text)}
+.wb-pri{margin-inline-start:auto;background:var(--accent-soft);color:var(--accent-hover);font-weight:var(--fw-bold);
+  padding:2px var(--s3);border-radius:var(--r-pill);font-size:var(--fs-xs)}
+.wb-alert{font-weight:var(--fw-semibold);color:var(--danger)}
+.wb-flight.level-amber .wb-alert{color:var(--warning)}
+.wb-raise{align-self:flex-start}
+
+/* ===== Strips: areas, right-now tiles, the exception ticker ===== */
+.wb-strip{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s5)}
+.wb-strip-title{font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 var(--s3)}
+.wb-areas{display:grid;gap:var(--s3);grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.wb-area{display:flex;flex-direction:column;gap:2px;padding:var(--s3) var(--s4);border-radius:var(--r);background:var(--surface-2);border-inline-start:4px solid transparent}
+.wb-area.level-amber{border-inline-start-color:var(--warning);background:var(--warning-soft)}
+.wb-area.level-red{border-inline-start-color:var(--danger);background:var(--danger-soft)}
+.wb-area-name{font-weight:var(--fw-semibold)}
+.wb-area-num b{font-size:var(--fs-xl);font-weight:var(--fw-bold)}
+.wb-exc{list-style:none;margin:var(--s4) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--s2);font-size:var(--fs-sm)}
+.wb-exc li{display:flex;gap:var(--s2);align-items:baseline;flex-wrap:wrap}
+
+/* On an actual wall screen there is no mouse: hide the one control until hovered/focused */
+@media (min-width:1600px){
+  .wb-raise{opacity:.35}
+  .wb-flight:hover .wb-raise,.wb-raise:focus-visible{opacity:1}
+}
