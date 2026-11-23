@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createStore } from '../../shared/store.js';
 import { seedDeparture, SAMPLE_TAG_FILES } from '../../shared/seed/departure.js';
+import { validateState, summarise } from '../../shared/seed/validate.js';
 import * as tags from '../../shared/services/tagService.js';
 import * as be from '../../shared/services/backendService.js';
 import * as tv from '../../shared/services/travelerService.js';
@@ -357,5 +358,42 @@ describe('seed on top of imported pre-v7 data (regression)', () => {
     expect(be.manifestStatus(s, 'SV 1821').total).toBe(s.bags.filter((b) => b.flight_id === 'FLT-SV-1821' && !b.legacy).length);
     // login by Nusuk ID + passport picks the v7 traveler, not the legacy one
     expect(tv.findTravelerForLogin(s, '2000000004', 'BX0987654').id).toBe('TRV-2000000004');
+  });
+});
+
+describe('seed invariants', () => {
+  it('the seeded demo holds every invariant the seed script checks', () => {
+    const s = createStore({ storage: null, baseAccounts: false }).get();
+    seedDeparture(s, { now: NOW });
+    expect(validateState(s)).toEqual([]);
+    const sum = summarise(s);
+    expect(sum.flights).toBe(5);
+    expect(sum.areas).toBe(3);
+    expect(sum.bags).toBe(16); // the cancelled flight's 8 + 2 each for the 4 pre-booked collections
+    expect(sum.bagsByStatus['Received at Warehouse']).toBe(8);
+  });
+
+  it('re-running the seed changes nothing (it is an upsert, not an insert)', () => {
+    const s = createStore({ storage: null, baseAccounts: false }).get();
+    seedDeparture(s, { now: NOW });
+    const before = summarise(s);
+    seedDeparture(s, { now: NOW });
+    expect(summarise(s)).toEqual(before);
+    expect(validateState(s)).toEqual([]);
+  });
+
+  it('catches the mistakes it is there to catch', () => {
+    const s = createStore({ storage: null, baseAccounts: false }).get();
+    seedDeparture(s, { now: NOW });
+
+    s.bags[0].status = 'Teleported';
+    s.bags[1].airline_tag_no = 1260020001; // a number, not a string — leading zeros would be lost
+    s.bags[2].flight_id = 'FLT-NOPE';
+    s.collectionSlots[0].booked_count = 999;
+    const problems = validateState(s);
+    expect(problems.join('\n')).toMatch(/unknown status "Teleported"/);
+    expect(problems.join('\n')).toMatch(/airline tag must stay a string/);
+    expect(problems.join('\n')).toMatch(/unknown flight FLT-NOPE/);
+    expect(problems.join('\n')).toMatch(/999 booked into/);
   });
 });

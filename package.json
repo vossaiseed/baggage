@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "build": "node scripts/build-check.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "seed:departure": "node scripts/seed-departure.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run seed:departure"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

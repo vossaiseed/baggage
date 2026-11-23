@@ -57,13 +57,32 @@ export function createStore(opts = {}) {
   };
 }
 
+/**
+ * `?seed=departure` on any departure app rebuilds the demo store before the app reads it — the
+ * URL form of the Ops/Admin "Reset demo data" action, for starting a demo from a clean slate.
+ * The parameter is stripped afterwards so a refresh does not wipe the demo again.
+ * @returns {boolean}
+ */
+function consumeSeedParam() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('seed') !== 'departure') return false;
+    url.searchParams.delete('seed');
+    window.history?.replaceState?.(null, '', url.toString());
+    return true;
+  } catch { return false; }
+}
+
 let defaultStore = null;
 /** Browser singleton bound to window.localStorage (falls back to memory). */
 export function getStore() {
   if (!defaultStore) {
     let storage = null;
     try { storage = typeof window !== 'undefined' ? window.localStorage : null; } catch { storage = null; }
+    const fresh = consumeSeedParam();
     defaultStore = createStore({ storage, baseAccounts: true });
+    if (fresh) defaultStore.reset(); else defaultStore.get();
   }
   return defaultStore;
 }
