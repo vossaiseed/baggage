@@ -4,6 +4,8 @@ import { seedDeparture } from '../../shared/seed/departure.js';
 import * as ar from '../../shared/services/areaService.js';
 import * as ex from '../../shared/services/exceptionService.js';
 import * as rep from '../../shared/services/reportService.js';
+import * as mon from '../../shared/services/monitorService.js';
+import * as fl from '../../shared/services/flightService.js';
 import { PermissionError } from '../../shared/rbac.js';
 
 const NOW = new Date('2026-06-01T06:00:00Z').getTime();
@@ -230,5 +232,43 @@ describe('reports', () => {
     const ADM = s.users.find((u) => u.id === 'ADM-001');
     expect(rep.opsReport(s, ADM, { now: NOW }).totals.bags).toBe(rep.opsReport(s, OPS, { now: NOW }).totals.bags);
     expect(rep.exceptionLedger(s, OPS)).toEqual([]);
+  });
+});
+
+describe('window monitor wall board', () => {
+  it('shows the same numbers the consoles show, worst level first', () => {
+    const b = mon.wallBoard(s, MON, { now: NOW });
+    expect(b.flights.map((f) => f.flight.id)).toEqual(fl.forecastBoard(s, OPS, { now: NOW }).map((f) => f.flight.id));
+    expect(b.areas).toHaveLength(3);
+    expect(b.totals.flights).toBe(b.flights.length);
+    expect(b.totals.bagsToMove).toBe(b.flights.reduce((n, f) => n + f.bagsToMove, 0));
+    expect(b.worstLevel).toBe('green');
+    expect(b.refreshMin).toBe(5);
+
+    // 30 minutes before the first cut-off, bags that are not at the airport turn the board red
+    const late = mon.wallBoard(s, MON, { now: NOW + 5.75 * H });
+    expect(late.worstLevel).toBe('red');
+    expect(late.totals.red).toBeGreaterThan(0);
+  });
+
+  it('carries the open Critical/High exceptions and the active trips', () => {
+    ex.raiseException(s, { type: 'Seal Broken', severity: 'Critical', flight_id: SV, notes: 'Seal 88213 broken' }, ctx(WM));
+    const b = mon.wallBoard(s, MON, { now: NOW });
+    expect(b.exceptions.open).toBe(1);
+    expect(b.exceptions.critical).toHaveLength(1);
+    expect(b.exceptions.high).toHaveLength(0);
+    expect(b.trips.active).toBe(0);
+  });
+
+  it('a monitor may raise a flight to Ops and nothing else', () => {
+    const n = mon.alertOps(s, { flightId: SV, message: 'Three bags still at the residence.' }, ctx(MON));
+    expect(n.roles).toEqual(['ops_manager']);
+    expect(n.severity).toBe('critical');
+    expect(s.auditLog.some((a) => a.action === 'monitor.alert_ops' && a.entity_id === SV)).toBe(true);
+    expect(() => mon.alertOps(s, { flightId: SV, message: '' }, ctx(MON))).toThrowError(expect.objectContaining({ code: 'INVALID' }));
+    expect(() => mon.alertOps(s, { flightId: 'NOPE', message: 'Look at this' }, ctx(MON))).toThrowError(expect.objectContaining({ code: 'NOT_FOUND' }));
+    // the board is read-only: a monitor cannot work an exception or touch a flight
+    expect(() => ex.resolveException(s, 'EXC-000001', { resolution: 'Sorted it' }, ctx(MON))).toThrow(PermissionError);
+    expect(() => fl.cancelFlight(s, SV, { reason: 'Not my call' }, ctx(MON))).toThrow(PermissionError);
   });
 });
