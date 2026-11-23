@@ -150,6 +150,8 @@ const GLOBAL_READ = Object.freeze(['airlines', 'flights']);
  * scope -> collection -> how a row is matched to the user.
  * `fields`: row fields (any match); `userKey`: user field it must equal;
  * `array`: row field holds an array of ids.
+ * A list of rules means "any of these matches" — used where a row can belong to a user by more
+ * than one route (an area's Transport Staff also run the airport trip assigned to them by name).
  */
 const SCOPE_RULES = Object.freeze({
   own: {
@@ -164,11 +166,19 @@ const SCOPE_RULES = Object.freeze({
     collectionAssignments: { fields: ['collection_area_id'], userKey: 'area_id' },
     collectionSlots: { fields: ['collection_area_id'], userKey: 'area_id' },
     residences: { fields: ['collection_area_id'], userKey: 'area_id' },
-    bags: { fields: ['collection_area_id'], userKey: 'area_id' },
+    bags: [
+      { fields: ['collection_area_id'], userKey: 'area_id' },
+      // Bags loaded onto the airport truck this staff member is driving: the run starts at the
+      // warehouse, so it has no collection area of its own.
+      { fields: ['airport_trip_staff_id'], userKey: 'id' },
+    ],
     bagTags: { fields: ['collection_area_id'], userKey: 'area_id' },
     travelers: { fields: ['collection_area_id'], userKey: 'area_id' },
     collectionAreas: { fields: ['id'], userKey: 'area_id' },
-    trips: { fields: ['area_from', 'area_to'], userKey: 'area_id' },
+    trips: [
+      { fields: ['area_from', 'area_to'], userKey: 'area_id' },
+      { fields: ['staff_id'], userKey: 'id' },
+    ],
     exceptions: { fields: ['area_id'], userKey: 'area_id' },
   },
   warehouse: {
@@ -210,9 +220,11 @@ function scopePredicate(user, collection) {
   if (preset.scope === 'all') return () => true;
   const rule = SCOPE_RULES[preset.scope]?.[collection];
   if (rule) {
-    const want = user[rule.userKey];
-    if (want == null) return () => false; // scoped user without a scope value sees nothing
-    return (row) => rule.fields.some((f) => (rule.array ? (row?.[f] || []).includes(want) : row?.[f] === want));
+    const rules = (Array.isArray(rule) ? rule : [rule])
+      .map((r) => ({ ...r, want: user[r.userKey] }))
+      .filter((r) => r.want != null); // a scoped user without that scope value matches nothing through it
+    if (!rules.length) return () => false;
+    return (row) => rules.some((r) => r.fields.some((f) => (r.array ? (row?.[f] || []).includes(r.want) : row?.[f] === r.want)));
   }
   if (preset.scope !== 'own' && GLOBAL_READ.includes(collection)) return () => true;
   return null;

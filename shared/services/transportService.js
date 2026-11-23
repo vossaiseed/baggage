@@ -6,8 +6,10 @@
  * warehouse. There is no per-bag scan at the pickup point (checkinService.handToTransport already
  * counted the bags) — only a count match against that log, enforced before any bag status moves.
  *
- * Airport trips (warehouse -> airport) are scaffolded in the data model (Trip.type) but their
- * real flow arrives in Phase 6, once Warehouse (Phase 5) can set "Loaded to Airport Truck".
+ * Airport trips (warehouse -> airport) are dispatched to ONE named Transport Staff member (the run
+ * starts at the warehouse, so it has no collection area to scope it by): the warehouse loads and
+ * closes the truck, that staff member seals it, drives it ("In Transit to Airport") and hands it to
+ * the Airport Coordinator, who offloads it (shared/services/airportService.js).
  */
 import { assertCan, scopeFilter } from '../rbac.js';
 import { makeDriver, makeTruck, makeTrip } from '../models.js';
@@ -182,15 +184,18 @@ export function dispatchCollectionTrip(state, areaId, input, ctx) {
 }
 
 /**
- * Assign a driver + truck for the warehouse → airport run. The Warehouse Manager asks for a truck
- * (`warehouseService.requestAirportTruck`); the Manager dispatches it here, then the warehouse loads
- * screened bags onto it ("Loaded to Airport Truck"). Departing / arriving at the airport is Phase 6.
- * @param {object} state @param {{warehouseId:string, driverId:string, truckId:string, airportId?:string}} input @param {object} ctx
+ * Assign a driver + truck + the Transport Staff member who runs the warehouse → airport leg. The
+ * Warehouse Manager asks for a truck (`warehouseService.requestAirportTruck`); the Manager
+ * dispatches it here, the warehouse loads screened bags onto it ("Loaded to Airport Truck"), then
+ * the assigned staff member seals and drives it (`departForAirport`).
+ * @param {object} state @param {{warehouseId:string, driverId:string, truckId:string, staffId:string, airportId?:string}} input @param {object} ctx
  */
 export function dispatchAirportTrip(state, input, ctx) {
   assertCan(ctx.user, 'dispatch:assign');
   const warehouseId = input?.warehouseId;
   if (!state.warehouses.some((w) => w.id === warehouseId)) throw new ServiceError('NOT_FOUND', `Warehouse ${warehouseId} not found.`);
+  const staff = state.users.find((u) => u.id === input?.staffId && u.role === 'transport_staff' && u.status !== 'Disabled');
+  if (!staff) throw new ServiceError('INVALID', 'Choose the Transport Staff member who will run the airport leg.');
   const waiting = state.bags.filter((b) => b.warehouse_id === warehouseId && b.status === 'Screened').length;
   if (waiting === 0) throw new ServiceError('NOTHING_TO_LOAD', 'No screened bags are waiting at this warehouse.');
   if (state.trips.some((t) => t.type === 'Airport' && t.warehouse_id === warehouseId && ACTIVE_TRIP_STATUSES.includes(t.status))) {
@@ -205,13 +210,14 @@ export function dispatchAirportTrip(state, input, ctx) {
   const trip = makeTrip({
     id: `TRIP-${String(nextCounter(state, 'trip')).padStart(6, '0')}`, type: 'Airport', status: 'Dispatched',
     warehouse_id: warehouseId, airport_id: input.airportId || state.airports[0]?.id || null,
-    driver_id: driver.id, truck_id: truck.id, expected_count: waiting, dispatched_at: at,
+    driver_id: driver.id, truck_id: truck.id, staff_id: staff.id, expected_count: waiting, dispatched_at: at,
   });
   state.trips.push(trip);
   driver.status = 'Busy'; driver.truck_id = truck.id;
   truck.status = 'Busy'; truck.driver_id = driver.id;
   notify(state, { role: 'warehouse_manager', title: `Airport truck ${truck.id} is at the dock`, body: `${driver.name} is ready to load for the airport run.`, link: '#/loading' }, ctx);
-  audit(state, ctx, { action: 'trip.dispatch_airport', entity: 'Trip', entityId: trip.id, after: { warehouse_id: warehouseId, driver_id: driver.id, truck_id: truck.id, expected_count: waiting } });
+  notify(state, { user_id: staff.id, title: `Airport run — ${truck.id}`, body: `${driver.name} is loading at the warehouse. Seal and drive it once the load is closed.`, link: `#/trips/${trip.id}` }, ctx);
+  audit(state, ctx, { action: 'trip.dispatch_airport', entity: 'Trip', entityId: trip.id, after: { warehouse_id: warehouseId, driver_id: driver.id, truck_id: truck.id, staff_id: staff.id, expected_count: waiting } });
   return trip;
 }
 
@@ -279,6 +285,72 @@ export function arriveAtWarehouse(state, tripId, ctx) {
   return trip;
 }
 
+/* ───────────────────────── Airport trip flow (Transport Staff) ───────────────────────── */
+
+/** Airport runs assigned to me (scope: the trip's `staff_id`). */
+export function listMyAirportTrips(state, user, { includeDone = false } = {}) {
+  const mine = scopeFilter(user, 'trips', state.trips).filter((t) => t.type === 'Airport');
+  return mine.filter((t) => includeDone || ACTIVE_TRIP_STATUSES.includes(t.status))
+    .sort((a, b) => b.dispatched_at.localeCompare(a.dispatched_at));
+}
+
+/**
+ * Seal the loaded airport truck and drive it. Every bag on board goes
+ * "Loaded to Airport Truck" → "In Transit to Airport" (an idempotent status: re-confirming the
+ * departure never fails). The seal number is what the Airport Coordinator checks on arrival.
+ * @param {object} state @param {string} tripId @param {{sealNo:string}} input @param {object} ctx
+ */
+export function departForAirport(state, tripId, input, ctx) {
+  const trip = findTrip(state, tripId, ctx.user);
+  assertCan(ctx.user, 'trip:update', trip);
+  if (trip.type !== 'Airport') throw new ServiceError('INVALID_STATE', 'This is not an airport run.');
+  if (trip.status !== 'Loaded') throw new ServiceError('INVALID_STATE', `This truck is "${trip.status}" — the warehouse has not closed its load yet.`);
+  const sealNo = String(input?.sealNo || '').trim();
+  if (!sealNo) throw new ServiceError('SEAL_REQUIRED', 'Record the seal number fitted to the truck door.');
+  if (!trip.bag_ids.length) throw new ServiceError('NOTHING_LOADED', 'There are no bags on this truck.');
+
+  for (const id of trip.bag_ids) advanceBag(state, id, 'In Transit to Airport', { user: ctx.user, now: ctx.now, note: `Sealed ${sealNo} on ${trip.truck_id}` });
+  trip.seal_no = sealNo;
+  trip.status = 'En Route';
+  trip.departed_at = nowIso(ctx);
+  const airport = state.airports.find((a) => a.id === trip.airport_id);
+  notify(state, {
+    role: 'airport_coordinator', title: `${trip.truck_id} en route to ${airport?.code || 'the airport'}`,
+    body: `${trip.bag_ids.length} bag(s), seal ${sealNo}.`, link: '#/dep/incoming',
+  }, ctx);
+  audit(state, ctx, { action: 'trip.depart_airport', entity: 'Trip', entityId: trip.id, after: { seal_no: sealNo, bags: trip.bag_ids.length } });
+  return trip;
+}
+
+/** Arrival at the airport gate. The Coordinator checks the seal and offloads; the truck stays Busy until then. */
+export function arriveAtAirport(state, tripId, ctx) {
+  const trip = findTrip(state, tripId, ctx.user);
+  assertCan(ctx.user, 'trip:update', trip);
+  if (trip.type !== 'Airport') throw new ServiceError('INVALID_STATE', 'This is not an airport run.');
+  if (trip.status !== 'En Route') throw new ServiceError('INVALID_STATE', 'Depart the warehouse before arriving at the airport.');
+  trip.status = 'Arrived';
+  trip.arrived_at = nowIso(ctx);
+  notify(state, {
+    role: 'airport_coordinator', title: `${trip.truck_id} at the gate`,
+    body: `${trip.bag_ids.length} bag(s) — check seal ${trip.seal_no || '—'} before offloading.`, severity: 'warning', link: '#/dep/seal',
+  }, ctx);
+  audit(state, ctx, { action: 'trip.arrive_airport', entity: 'Trip', entityId: trip.id, after: { bags: trip.bag_ids.length } });
+  return trip;
+}
+
+/**
+ * Free the driver and truck a trip is holding. Fleet state only ever changes in this service —
+ * the Airport Coordinator calls this once the truck has actually been emptied.
+ * @param {object} state @param {object} trip
+ */
+export function releaseTripResources(state, trip) {
+  const driver = state.drivers.find((d) => d.id === trip.driver_id);
+  const truck = state.trucks.find((t) => t.id === trip.truck_id);
+  if (driver && driver.status === 'Busy') driver.status = 'Available';
+  if (truck && truck.status === 'Busy') truck.status = 'Available';
+  return { driver, truck };
+}
+
 /* ───────────────────────── reroute (Manager) ───────────────────────── */
 
 /**
@@ -336,9 +408,13 @@ export function reportSummary(state, { since } = /** @type {{since?:string|numbe
   const bagsMoved = arrived.reduce((n, t) => n + t.bag_ids.length, 0);
   const durations = arrived.filter((t) => t.arrived_at).map((t) => new Date(t.arrived_at).getTime() - new Date(t.dispatched_at).getTime());
   const avgMinutes = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 60000) : null;
+  const airport = state.trips.filter((t) => t.type === 'Airport' && new Date(t.dispatched_at).getTime() >= sinceMs);
+  const airportArrived = airport.filter((t) => t.status === 'Arrived');
   return {
     tripsDispatched: trips.length, tripsArrived: arrived.length, tripsActive: trips.filter((t) => ACTIVE_TRIP_STATUSES.includes(t.status)).length,
     bagsMoved, avgMinutes, reroutes: state.rerouteLogs.filter((r) => trips.some((t) => t.id === r.trip_id)).length,
-    trips: [...trips].sort((a, b) => b.dispatched_at.localeCompare(a.dispatched_at)),
+    airportTrips: airport.length, airportTripsArrived: airportArrived.length,
+    airportBagsMoved: airportArrived.reduce((n, t) => n + t.bag_ids.length, 0),
+    trips: [...trips, ...airport].sort((a, b) => b.dispatched_at.localeCompare(a.dispatched_at)),
   };
 }

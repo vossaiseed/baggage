@@ -262,20 +262,20 @@ describe('loading onto the airport truck', () => {
 
   it('the Transport Manager dispatches an airport truck, and only one per warehouse at a time', () => {
     screened();
-    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002' }, ctx(TM));
+    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002', staffId: 'TS-001' }, ctx(TM));
     expect(trip).toMatchObject({ type: 'Airport', status: 'Dispatched', warehouse_id: WH, airport_id: 'JED', expected_count: 2 });
     expect(s.drivers.find((d) => d.id === 'DRV-002').status).toBe('Busy');
-    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-003', truckId: 'TRK-003' }, ctx(TM))).toThrow(/already open/);
-    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-003', truckId: 'TRK-003' }, ctx(WM))).toThrow(PermissionError);
+    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-003', truckId: 'TRK-003', staffId: 'TS-001' }, ctx(TM))).toThrow(/already open/);
+    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-003', truckId: 'TRK-003', staffId: 'TS-001' }, ctx(WM))).toThrow(PermissionError);
   });
 
   it('refuses to dispatch an airport truck with nothing screened', () => {
-    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002' }, ctx(TM))).toThrow(/No screened bags/);
+    expect(() => tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002', staffId: 'TS-001' }, ctx(TM))).toThrow(/No screened bags/);
   });
 
   it('loads a screened bag per label scan and refuses duplicates, unscreened and cancelled bags', () => {
     const collection = screened();
-    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002' }, ctx(TM));
+    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002', staffId: 'TS-001' }, ctx(TM));
     const first = bagById(collection.bag_ids[0]);
     const ok = wh.scanBagToAirportTruck(s, trip.id, label(first), ctx(WM));
     expect(ok).toMatchObject({ ok: true, loaded: 1 });
@@ -289,7 +289,7 @@ describe('loading onto the airport truck', () => {
 
   it('closes the load, telling Transport and the Airport Coordinator what is coming', () => {
     const collection = screened();
-    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002' }, ctx(TM));
+    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002', staffId: 'TS-001' }, ctx(TM));
     expect(() => wh.closeAirportLoad(s, trip.id, ctx(WM))).toThrow(/at least one bag/);
     for (const id of collection.bag_ids) wh.scanBagToAirportTruck(s, trip.id, label(bagById(id)), ctx(WM));
     const closed = wh.closeAirportLoad(s, trip.id, ctx(WM));
@@ -304,7 +304,7 @@ describe('loading onto the airport truck', () => {
     let q = wh.loadingQueue(s, WM, { now: NOW });
     expect(q.waiting).toBe(2);
     expect(q.trips).toHaveLength(0);
-    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002' }, ctx(TM));
+    const trip = tr.dispatchAirportTrip(s, { warehouseId: WH, driverId: 'DRV-002', truckId: 'TRK-002', staffId: 'TS-001' }, ctx(TM));
     wh.scanBagToAirportTruck(s, trip.id, label(bagById(collection.bag_ids[0])), ctx(WM));
     q = wh.loadingQueue(s, WM, { now: NOW });
     expect(q.waiting).toBe(1);

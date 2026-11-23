@@ -40,13 +40,15 @@ function row(r) {
 }
 
 /**
- * Airport runs (Phase 5): the warehouse screens bags and asks for a truck; the Manager dispatches one
- * here. The warehouse then loads it and closes the load; driving it is Phase 6.
+ * Airport runs: the warehouse screens bags and asks for a truck; the Manager assigns a driver, a
+ * truck and the Transport Staff member who drives the leg. The warehouse loads it and closes the
+ * load; that staff member then seals it and drives it to the airport.
  */
 function airportRow(wh) {
   const waiting = S().bags.filter((b) => b.warehouse_id === wh.id && b.status === 'Screened').length;
   const open = S().trips.filter((t) => t.type === 'Airport' && t.warehouse_id === wh.id && ['Dispatched', 'Loaded', 'En Route'].includes(t.status));
   if (!waiting && !open.length) return '';
+  const staff = S().users.filter((u) => u.role === 'transport_staff' && u.status !== 'Disabled');
   return `<div class="board-row">
     <div class="board-top"><strong>${esc(wh.name)}</strong>
       <span class="row gap-2 wrap"><span class="fs-sm muted">${waiting} screened bag(s) waiting for the airport</span></span></div>
@@ -55,6 +57,7 @@ function airportRow(wh) {
       <form class="row gap-2 wrap" data-airport="${esc(wh.id)}">
         <select name="driverId" aria-label="Driver">${S().drivers.filter((d) => d.status === 'Available').map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('') || '<option value="">No driver available</option>'}</select>
         <select name="truckId" aria-label="Truck">${S().trucks.filter((t) => t.status === 'Available').map((t) => `<option value="${esc(t.id)}">${esc(t.id)} (${t.capacity_bags} bags)</option>`).join('') || '<option value="">No truck available</option>'}</select>
+        <select name="staffId" aria-label="Transport Staff running the leg">${staff.map((u) => `<option value="${esc(u.id)}">${esc(u.name)} (${esc(u.employee_id)})</option>`).join('') || '<option value="">No transport staff</option>'}</select>
         <button type="submit" class="btn btn-primary">Dispatch airport truck</button>
       </form>` : ''}
   </div>`;
@@ -89,9 +92,9 @@ function draw() {
   el.querySelectorAll('[data-airport]').forEach((form) => form.addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    const driverId = fd.get('driverId'); const truckId = fd.get('truckId');
-    if (!driverId || !truckId) return;
-    run((s, c) => tr.dispatchAirportTrip(s, { warehouseId: form.dataset.airport, driverId, truckId }, c), 'Airport truck dispatched to the warehouse.', draw);
+    const driverId = fd.get('driverId'); const truckId = fd.get('truckId'); const staffId = fd.get('staffId');
+    if (!driverId || !truckId || !staffId) return;
+    run((s, c) => tr.dispatchAirportTrip(s, { warehouseId: form.dataset.airport, driverId, truckId, staffId }, c), 'Airport truck dispatched to the warehouse.', draw);
   }));
   el.querySelectorAll('[data-reroute]').forEach((b) => b.addEventListener('click', () => openReroute(b.dataset.reroute)));
 }

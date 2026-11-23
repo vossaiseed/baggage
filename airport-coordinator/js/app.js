@@ -9,9 +9,11 @@ import { icon, toast, esc } from './ui.js';
 
 import * as loginView from './views/login.js';
 import * as dashboardView from './views/dashboard.js';
-import * as depIncomingView from './views/dep-incoming.js';
-import * as depGateView from './views/dep-gate.js';
-import * as depReceivingView from './views/dep-receiving.js';
+import * as depIncomingView from './v7/incoming.js';
+import * as depSealView from './v7/seal.js';
+import * as depOffloadView from './v7/offload.js';
+import * as depHandoverView from './v7/handover.js';
+import * as depVoucherView from './v7/voucher.js';
 import * as arrFlightsView from './views/arr-flights.js';
 import * as arrReceivingView from './views/arr-receiving.js';
 import * as arrSecurityView from './views/arr-security.js';
@@ -27,7 +29,10 @@ const NAV_GROUPS = [
     group: 'departure',
     items: [
       { hash: '#/dep/incoming', match: '/dep/incoming', label: 'Incoming trucks', iconName: 'truck' },
-      { hash: '#/dep/gate', match: '/dep/gate', label: 'Gate & holds', iconName: 'shield-alert' },
+      { hash: '#/dep/seal', match: '/dep/seal', label: 'Seal check', iconName: 'shield-check' },
+      { hash: '#/dep/offload', match: '/dep/offload', label: 'Offload', iconName: 'package-check' },
+      { hash: '#/dep/handover', match: '/dep/handover', label: 'SGS handover', iconName: 'clipboard-check' },
+      { hash: '#/dep/voucher', match: '/dep/voucher', label: 'Voucher', iconName: 'receipt' },
     ],
   },
   {
@@ -46,6 +51,9 @@ const NAV_GROUPS = [
     ],
   },
 ];
+
+/** Pre-v7 departure screens: code kept on disk (`views/legacy-dep-*.js`) but never routable. */
+const LEGACY_DEP_PATHS = ['/dep/airline', '/dep/gate', '/dep/receiving'];
 
 let shellMounted = false;
 let iconObserver = null;
@@ -334,8 +342,12 @@ function registerRoutes() {
   });
   route('/', wrapView(dashboardView));
   route('/dep/incoming', wrapView(depIncomingView));
-  route('/dep/gate', wrapView(depGateView));
-  route('/dep/receiving/:id', wrapView(depReceivingView));
+  route('/dep/seal', wrapView(depSealView));
+  route('/dep/offload', wrapView(depOffloadView));
+  route('/dep/offload/:id', wrapView(depOffloadView));
+  route('/dep/handover', wrapView(depHandoverView));
+  route('/dep/handover/:id', wrapView(depHandoverView));
+  route('/dep/voucher', wrapView(depVoucherView));
   route('/arr/flights', wrapView(arrFlightsView));
   route('/arr/flights/:id', wrapView(arrFlightsView));
   route('/arr/receiving/:id', wrapView(arrReceivingView));
@@ -356,9 +368,11 @@ function registerRoutes() {
   });
 
   setGuard((path) => {
-    // v7: the Airline / Ground Handler module is out of the departure flow. Handover is to the
-    // Airport Authority (SGS) — built in Phase 6. The old airline-handover screen stays as code only.
-    if (path === '/dep/airline' || path.startsWith('/dep/airline/')) return '#/dep/incoming';
+    // v7 replaced the whole departure side: the Airline / Ground Handler module is out of the
+    // departure flow (handover is to the Airport Authority), and the old gate / receiving screens
+    // are superseded by Seal check + Offload. Their code is kept on disk as `legacy-dep-*.js`,
+    // unimported; their routes redirect to the v7 equivalents.
+    if (LEGACY_DEP_PATHS.some((x) => path === x || path.startsWith(`${x}/`))) return '#/dep/incoming';
     if (path !== '/login' && !isAuthed()) return '#/login';
     if (path === '/login' && isAuthed()) return '#/';
     return true;

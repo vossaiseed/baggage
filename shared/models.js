@@ -75,19 +75,51 @@ export function makeTruck(p = {}) {
 }
 
 /**
- * A truck run. Collection: area_from -> warehouse_id. Airport (Phase 6): warehouse_id -> airport_id.
- * @param {{id?:string,type?:string,status?:string,area_from?:string|null,area_to?:string|null,warehouse_id?:string|null,airport_id?:string|null,driver_id?:string|null,truck_id?:string|null,bag_ids?:string[],expected_count?:number|null,dispatched_at?:string,loaded_at?:string|null,departed_at?:string|null,arrived_at?:string|null,note?:string|null}} [p]
+ * A truck run. Collection: area_from -> warehouse_id (run by the area's Transport Staff).
+ * Airport: warehouse_id -> airport_id, run by the named `staff_id`, sealed at the warehouse
+ * (`seal_no`), seal-checked and offloaded at the airport (`seal_check`, `offload`).
+ * @param {{id?:string,type?:string,status?:string,area_from?:string|null,area_to?:string|null,warehouse_id?:string|null,airport_id?:string|null,driver_id?:string|null,truck_id?:string|null,staff_id?:string|null,bag_ids?:string[],expected_count?:number|null,dispatched_at?:string,loaded_at?:string|null,departed_at?:string|null,arrived_at?:string|null,seal_no?:string|null,note?:string|null}} [p]
  */
 export function makeTrip(p = {}) {
   return {
     id: p.id, type: p.type, status: p.status || 'Dispatched',
     area_from: p.area_from ?? null, area_to: p.area_to ?? null,
     warehouse_id: p.warehouse_id ?? null, airport_id: p.airport_id ?? null,
-    driver_id: p.driver_id ?? null, truck_id: p.truck_id ?? null,
+    driver_id: p.driver_id ?? null, truck_id: p.truck_id ?? null, staff_id: p.staff_id ?? null,
     bag_ids: p.bag_ids || [], expected_count: p.expected_count ?? null,
     dispatched_at: p.dispatched_at || new Date().toISOString(),
     loaded_at: p.loaded_at ?? null, departed_at: p.departed_at ?? null, arrived_at: p.arrived_at ?? null,
+    seal_no: p.seal_no ?? null, seal_check: null, offload: null,
     note: p.note ?? null,
+  };
+}
+
+/**
+ * The physical hand-off of a flight's bags to the Airport Authority (SGS) at the airport.
+ * `tags` is the airline-tag manifest; disputed bags are the only ones scanned again.
+ * @param {{id?:string,flight_id?:string,airport_id?:string|null,bag_ids?:string[],tags?:string[],status?:string,created_at?:string,by?:string|null}} [p]
+ */
+export function makeHandover(p = {}) {
+  return {
+    id: p.id, flight_id: p.flight_id ?? null, airport_id: p.airport_id ?? null,
+    bag_ids: p.bag_ids || [], tags: p.tags || [], status: p.status || 'Open',
+    disputed: /** @type {{bag_id:string, reason:string, resolved_at:string|null}[]} */ ([]),
+    officer: null, signature: null, handed_at: null, voucher_id: null,
+    created_at: p.created_at || new Date().toISOString(), by: p.by ?? null,
+  };
+}
+
+/**
+ * The voucher SGS issues for a handover. Accepting it is the bags' "SGS Voucher Accepted" step.
+ * @param {{id?:string,voucher_no?:string,handover_id?:string,flight_id?:string,airport_id?:string|null,bag_ids?:string[],counted_tags?:string[],status?:string,issued_at?:string}} [p]
+ */
+export function makeSgsVoucher(p = {}) {
+  return {
+    id: p.id, voucher_no: p.voucher_no, handover_id: p.handover_id ?? null,
+    flight_id: p.flight_id ?? null, airport_id: p.airport_id ?? null,
+    bag_ids: p.bag_ids || [], counted_tags: p.counted_tags || [],
+    status: p.status || 'Pending', issued_at: p.issued_at || new Date().toISOString(),
+    accepted_at: null, missing_tags: /** @type {string[]} */ ([]),
   };
 }
 

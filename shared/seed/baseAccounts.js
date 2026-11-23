@@ -13,6 +13,12 @@ export const BASE_AREAS = Object.freeze([
   { id: 'AREA-SHISHA', name: 'Shisha', district: 'Shisha', lat: 21.4000, lng: 39.8900 },
 ]);
 
+/** Departure airports. Only JED has flights in the demo; MED exists so APC-002 has a real home. */
+export const BASE_AIRPORTS = Object.freeze([
+  { id: 'JED', code: 'JED', name: 'King Abdulaziz International' },
+  { id: 'MED', code: 'MED', name: 'Prince Mohammad bin Abdulaziz' },
+]);
+
 /** Demo fleet for the Transport Manager's Drivers/Trucks screens (Phase 4). */
 export const BASE_DRIVERS = Object.freeze([
   { id: 'DRV-001', name: 'Hamza Qureshi', phone: '+966500000101', license_no: 'SA-DL-10001' },
@@ -39,6 +45,7 @@ export const BASE_USERS = Object.freeze([
   U('WM-002', 'Imran', ROLE.WAREHOUSE_MANAGER, { warehouse_id: 'WH-MAKKAH', legacy_id: 'WH-002' }),
   U('BE-001', 'Khalid', ROLE.BACKEND),
   U('APC-001', 'Salman', ROLE.AIRPORT_COORDINATOR, { airport_id: 'JED' }),
+  U('APC-002', 'Mariam', ROLE.AIRPORT_COORDINATOR, { airport_id: 'MED' }),
   U('MON-001', 'Noor', ROLE.WINDOW_MONITOR),
   U('OPS-001', 'Layla Al-Harthi', ROLE.OPS_MANAGER),
   U('ADM-001', 'Zaid Al-Harbi', ROLE.SYSTEM_ADMIN),
@@ -52,7 +59,7 @@ export function ensureBaseAccounts(state) {
     else for (const [k, v] of Object.entries({ ...a, warehouse_id: 'WH-MAKKAH' })) if (cur[k] == null) cur[k] = v;
   }
   if (!state.warehouses.some((w) => w.id === 'WH-MAKKAH')) state.warehouses.push({ id: 'WH-MAKKAH', name: 'Rabel Central Warehouse — Makkah' });
-  if (!state.airports.some((a) => a.id === 'JED')) state.airports.push({ id: 'JED', code: 'JED', name: 'King Abdulaziz International' });
+  for (const a of BASE_AIRPORTS) if (!state.airports.some((x) => x.id === a.id)) state.airports.push({ ...a });
   for (const d of BASE_DRIVERS) if (!state.drivers.some((x) => x.id === d.id)) state.drivers.push(makeDriver(d));
   for (const t of BASE_TRUCKS) if (!state.trucks.some((x) => x.id === t.id)) state.trucks.push(makeTruck(t));
   for (const b of BASE_USERS) {

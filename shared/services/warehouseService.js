@@ -371,6 +371,10 @@ export function scanBagToAirportTruck(state, tripId, scan, ctx) {
 
   advanceBag(state, bag.id, 'Loaded to Airport Truck', { user: ctx.user, now: ctx.now, note: `Airport truck ${trip.truck_id}` });
   bag.airport_trip_id = trip.id;
+  // The run leaves the warehouse, so the bag has no collection area to scope it by: record whose
+  // truck it is on (the assigned Transport Staff) and where it is going (rbac `area` / `airport`).
+  bag.airport_trip_staff_id = trip.staff_id ?? null;
+  if (trip.airport_id) bag.airport_id = trip.airport_id;
   trip.bag_ids.push(bag.id);
   recordScan(state, { ...base, result: 'OK' }, ctx);
   return { ok: true, result: 'OK', message: `${bag.tag_no} loaded (${trip.bag_ids.length} on board).`, bag, loaded: trip.bag_ids.length };
