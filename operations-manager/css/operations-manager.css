@@ -79,3 +79,60 @@
 .audience-chip:has(input:checked){background:var(--accent-soft);border-color:var(--accent)}
 
 .last-updated{font-size:var(--fs-xs);color:var(--muted);display:flex;align-items:center;gap:var(--s2)}
+
+/* ===== Departure v7 (Flights · Forecast · Exceptions · Areas · Staff · Reports · Closure) ===== */
+
+/* spacing helpers used by the v7 screens */
+.mb{margin-block-end:var(--s4)} .mt{margin-block-start:var(--s4)}
+.toolbar{display:flex;gap:var(--s3);flex-wrap:wrap;align-items:center;margin-block-end:var(--s4)}
+.toolbar > input,.toolbar > select{max-width:280px;flex:0 1 240px}
+.toolbar > .checkbox-row{white-space:nowrap}
+.btn-block{width:100%}
+
+/* window / timer wording takes the alert colour */
+.level-amber{color:var(--warning);font-weight:var(--fw-semibold)}
+.level-red{color:var(--danger);font-weight:var(--fw-semibold)}
+
+/* Plain v7 tables (rows are not clickable, so they don't use .data-table's pointer affordance) */
+.table-wrap > table{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+.table-wrap > table thead th{
+  text-align:start;padding:var(--s3);background:var(--surface-2);color:var(--muted);
+  font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.table-wrap > table td{padding:var(--s3);border-bottom:1px solid var(--border);vertical-align:middle}
+.table-wrap > table tbody tr:last-child td{border-bottom:none}
+.table-wrap > table tbody tr:hover{background:var(--surface-2)}
+.table-wrap > table input[type="checkbox"]{width:20px;height:20px;min-height:0;margin:0;accent-color:var(--accent)}
+
+/* A flight / area / forecast row: a card that carries its alert level on the leading edge */
+.flight-row,.board-row{
+  background:var(--surface);border:1px solid var(--border);border-inline-start:4px solid var(--border);
+  border-radius:var(--r-lg);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);
+}
+.flight-row.alert-amber,.board-row.alert-amber{border-inline-start-color:var(--warning);background:var(--warning-soft)}
+.flight-row.alert-red,.board-row.alert-red{border-inline-start-color:var(--danger);background:var(--danger-soft)}
+.board-top{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--s3);flex-wrap:wrap}
+
+/* Where a flight's bags are, as one bar */
+.stage-bar{display:flex;height:10px;border-radius:var(--r-pill);overflow:hidden;background:var(--surface-2)}
+.stage-bar > span{display:block}
+.stage-bar .seg-declared{background:var(--border)}
+.stage-bar .seg-moving{background:var(--accent)}
+.stage-bar .seg-airport{background:#0891B2}
+.stage-bar .seg-done{background:var(--success)}
+.stage-bar .seg-side{background:var(--warning)}
+.stage-bar .seg-empty{background:var(--surface-2)}
+
+/* Exception queue: severity reads at a glance */
+.exc-row{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s4);border-bottom:1px solid var(--border)}
+.exc-row:last-child{border-bottom:none}
+.exc-row.sev-critical,.exc-row.sev-high{background:var(--danger-soft)}
+.exc-log{margin:0;padding-inline-start:var(--s5);font-size:var(--fs-xs);color:var(--muted)}
+
+/* Report sections */
+.report-grid{display:grid;gap:var(--s4);grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.stat-list{display:flex;flex-direction:column;gap:var(--s2);font-size:var(--fs-sm)}
+.stat-list > div{display:flex;justify-content:space-between;gap:var(--s3)}
+.stat-list .k{color:var(--muted)}
+.stat-list .v{font-family:var(--mono);font-weight:var(--fw-semibold)}

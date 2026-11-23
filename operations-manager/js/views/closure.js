@@ -1,195 +1,104 @@
-import * as api from '../api.js';
-import { getDirection } from '../store.js';
-import {
-  skeletonBlock, errorState, emptyState, toast, confirmDialog, fmtDateTime, fmtNumber, esc, icon,
-} from '../ui.js';
-import { statusChip } from '../components/status-chip.js';
+/**
+ * Closure — a flight closes only when every bag is accounted for (on the aircraft, held,
+ * rebooked or returned) and no High/Critical exception is still open. Lower-severity
+ * exceptions are shown as warnings and do not block it.
+ */
+import { run, read, chip, severityColor } from '../data.js';
+import * as fl from '../../../shared/services/flightService.js';
+import { esc, fmtDateTime, openDrawer, closeDrawer, emptyState, confirmDialog } from '../ui.js';
 import { navigate } from '../router.js';
 
-let appEl = null;
-let flightId = null;
+let el = null;
+let selected = null;
 
-/**
- * Renders the Closure view: a picker of flights ready for final closure (plus
- * a closed-flights archive) when no flightId is given, or the per-flight
- * closure checklist when one is.
- * @param {{flightId?:string}} params
- * @param {HTMLElement} app
- * @returns {{destroy:Function, refresh:Function}}
- */
-export function render(params, app) {
-  appEl = app;
-  flightId = params.flightId || null;
-  load();
-  // No background polling here: closing a flight is a deliberate, one-shot
-  // action, and a silent re-render could disrupt the user mid-confirmation
-  // (same reasoning as reconciliation.js). Direction-switch and manual
-  // navigation already call `refresh`.
-  return { destroy, refresh: load };
+export function render(params, app) { el = app; selected = params?.flightId || selected; draw(); return { destroy, refresh: draw, poll: draw }; }
+export function destroy() { el = null; }
+
+function candidateRow(r) {
+  const f = r.flight;
+  return `<tr>
+    <td>${esc(f.code)}</td>
+    <td>${esc(fmtDateTime(f.cut_off_at))}</td>
+    <td>${chip(f.status, f.status === 'Cancelled' ? 'red' : f.status === 'Completed' ? 'green' : 'blue')}</td>
+    <td class="num">${r.counts.total}</td>
+    <td class="num">${r.counts.accounted}</td>
+    <td class="num">${r.counts.toMove}</td>
+    <td>${f.status === 'Completed' ? esc(fmtDateTime(f.completed_at)) : `<button type="button" class="btn btn-secondary" data-pick="${esc(f.id)}">Checklist</button>`}</td>
+  </tr>`;
 }
 
-export function destroy() { appEl = null; }
-
-function pageHeader() {
-  return `<div class="page-header"><div><h1 class="page-title">Closure</h1><p class="page-subtitle">Final checklist and closure for flights approved in Reconciliation.</p></div></div>`;
-}
-
-async function load() {
-  if (!appEl) return;
-  if (!flightId) { renderPicker(); return; }
-  appEl.innerHTML = pageHeader() + skeletonBlock(6);
-  try {
-    const data = await api.closureChecklist(flightId);
-    renderChecklist(data);
-  } catch (err) {
-    appEl.innerHTML = pageHeader() + errorState({ message: err.message });
-    appEl.querySelector('[data-action="retry"]')?.addEventListener('click', load);
-  }
-}
-
-function renderPicker() {
-  appEl.innerHTML = `
-    ${pageHeader()}
-    <div id="closure-picker">${skeletonBlock(4)}</div>
-    <h2 class="section-title" style="margin-block-start:var(--s6)">Closed flights archive</h2>
-    <div id="closure-archive">${skeletonBlock(4)}</div>`;
-  loadPickerSection();
-  loadArchiveSection();
-}
-
-async function loadPickerSection() {
-  const root = appEl?.querySelector('#closure-picker');
-  if (!root) return;
-  try {
-    const direction = getDirection();
-    const dash = await api.getDashboard(direction);
-    const flights = dash.flights.filter((f) => f.status === 'Completed');
-    if (!flights.length) {
-      root.innerHTML = emptyState({
-        message: "No flights are ready for final closure yet — approve a flight's reconciliation first.",
-        actionLabel: 'Go to Reconciliation',
-        actionAttr: 'data-action="goto-reconciliation"',
-      });
-      root.querySelector('[data-action="goto-reconciliation"]')?.addEventListener('click', () => navigate('#/reconciliation'));
-      return;
-    }
-    root.innerHTML = `
-      <div class="grid grid-auto">
-        ${flights.map((f) => `
-          <button type="button" class="card card-tap" data-pick="${esc(f.id)}">
-            <div class="row" style="justify-content:space-between">
-              <strong>${esc(f.code)}</strong>${statusChip(f.status)}
-            </div>
-            <p class="fs-sm muted" style="margin-block-start:var(--s2)">${esc(f.route)}</p>
-            <p class="fs-sm" style="margin-block-start:var(--s2)">${fmtNumber(f.checkpoints.c)} / ${fmtNumber(f.totalBags)} ${esc(f.checkpointLabels[2].toLowerCase())}</p>
-          </button>`).join('')}
-      </div>`;
-    root.querySelectorAll('[data-pick]').forEach((btn) => btn.addEventListener('click', () => navigate(`#/closure/${btn.dataset.pick}`)));
-  } catch (err) {
-    root.innerHTML = errorState({ message: err.message });
-    root.querySelector('[data-action="retry"]')?.addEventListener('click', loadPickerSection);
-  }
-}
-
-async function loadArchiveSection() {
-  const root = appEl?.querySelector('#closure-archive');
-  if (!root) return;
-  try {
-    const flights = await api.getClosedFlights();
-    if (!flights.length) {
-      root.innerHTML = emptyState({ message: 'No flights have been closed yet.' });
-      return;
-    }
-    root.innerHTML = `
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th scope="col">Flight</th><th scope="col">Direction</th><th scope="col">Route</th><th scope="col">Bags</th><th scope="col">Closed</th></tr></thead>
-          <tbody>${flights.map((f) => `
-            <tr>
-              <td data-label="Flight"><span class="mono">${esc(f.code)}</span></td>
-              <td data-label="Direction">${esc(f.direction)}</td>
-              <td data-label="Route">${esc(f.route)}</td>
-              <td data-label="Bags">${fmtNumber(f.checkpoints.c)} / ${fmtNumber(f.totalBags)} ${esc(f.checkpointLabels[2].toLowerCase())}</td>
-              <td data-label="Closed">${esc(fmtDateTime(f.closedAt))}</td>
-            </tr>`).join('')}</tbody>
-        </table>
-      </div>`;
-  } catch (err) {
-    root.innerHTML = errorState({ message: err.message });
-    root.querySelector('[data-action="retry"]')?.addEventListener('click', loadArchiveSection);
-  }
-}
-
-function checklistItem(label, done, extraHtml = '') {
+function checklistHtml(c) {
+  const closed = c.flight.status === 'Completed';
+  // A closed flight is not "not ready" — it is done; its only blocker is that it is already closed.
+  const blockers = closed ? [] : c.blockers;
   return `
-    <div class="checklist-item ${done ? 'done' : 'pending'}">
-      <span class="checklist-icon">${icon(done ? 'check-circle' : 'clock', 20)}</span>
-      <div style="flex:1">
-        <div>${esc(label)}</div>
-        ${extraHtml}
+    <div class="stack gap-3">
+      <div class="row gap-2 wrap">
+        ${chip(c.flight.status, c.flight.status === 'Cancelled' ? 'red' : closed ? 'green' : 'blue')}
+        ${closed ? '' : chip(c.canClose ? 'Ready to close' : 'Not ready', c.canClose ? 'green' : 'red')}
       </div>
+      <div class="fs-sm muted">cut-off ${esc(fmtDateTime(c.flight.cut_off_at))} · ${c.counts.total} bag(s)</div>
+      <div class="stat-list">
+        <div><span class="k">On the aircraft</span><span class="v">${c.counts.loaded}</span></div>
+        <div><span class="k">Held (cancelled flight)</span><span class="v">${c.counts.held}</span></div>
+        <div><span class="k">Rebooked</span><span class="v">${c.counts.rebooked}</span></div>
+        <div><span class="k">Returned to traveler</span><span class="v">${c.counts.returned}</span></div>
+        <div><span class="k">Not accounted for</span><span class="v">${c.outstanding.length}</span></div>
+      </div>
+      ${blockers.length ? `<ul class="stack gap-1">${blockers.map((b) => `<li class="level-red fs-sm">${esc(b)}</li>`).join('')}</ul>` : ''}
+      ${c.alerts.map((a) => `<div class="fs-sm level-${a.level}">${esc(a.message)}</div>`).join('')}
+      ${c.outstanding.length ? `<div class="table-wrap"><table><thead><tr><th>Bag</th><th>Traveler</th><th>Status</th></tr></thead>
+        <tbody>${c.outstanding.map((o) => `<tr><td class="mono">${esc(o.bag.tag_no || o.bag.id)}</td><td>${esc(o.traveler?.name || '—')}</td><td>${esc(o.bag.status)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${c.exceptions.length ? `<div class="stack gap-1">${c.exceptions.map((e) => `<div class="fs-sm">${chip(e.severity, severityColor(e.severity))} ${esc(e.type)} <span class="mono fs-xs muted">${esc(e.id)}</span> ${esc(e.notes || '')}</div>`).join('')}
+        <a class="fs-sm" href="#/exceptions">Work the exceptions</a></div>` : ''}
     </div>`;
 }
 
-function renderChecklist(data) {
-  const { flight, allBagsAccounted, investigateList, finalReportGenerated, kpisUpdated, auditLogEntry, archivedForArrival } = data;
-  const isArrival = flight.direction === 'arrival';
-  const needsApproval = flight.status !== 'Completed' && !flight.closed;
-  const canClose = flight.status === 'Completed' && !flight.closed && allBagsAccounted;
-
-  const items = [
-    checklistItem('All bags accounted', allBagsAccounted, allBagsAccounted ? '' : `
-      <p class="fs-sm muted" style="margin-block-start:4px">
-        ${fmtNumber(investigateList.length)} bag${investigateList.length === 1 ? '' : 's'} still unaccounted —
-        <a href="#/reconciliation/${esc(flight.id)}">resolve in Reconciliation</a>
-      </p>`),
-    checklistItem('Final report generated', finalReportGenerated),
-    checklistItem('KPIs updated', kpisUpdated),
-    checklistItem('Audit log entry', auditLogEntry),
-  ];
-  if (isArrival) items.push(checklistItem('Archived for arrival', !!archivedForArrival));
-
-  appEl.innerHTML = `
-    ${pageHeader()}
-    <div class="row gap-2 wrap" style="margin-block-end:var(--s4)">
-      <a class="btn btn-ghost" href="#/closure">${icon('arrow-left', 16)} All flights</a>
-      <span class="grow"></span>
-      ${needsApproval ? `<a class="btn btn-secondary" href="#/reconciliation/${esc(flight.id)}">${icon('git-compare', 16)} Go to reconciliation</a>` : ''}
+function draw() {
+  if (!el) return;
+  const rows = read((s, u) => fl.listFlights(s, u, { now: Date.now() }), []) || [];
+  // Cancelled and closed flights always belong here; a live one only once it is past its
+  // cut-off with nothing left to move (a future flight with no bags yet is not "ready").
+  const now = Date.now();
+  const closable = rows.filter((r) => ['Cancelled', 'Completed'].includes(r.flight.status)
+    || (r.counts.total > 0 && r.counts.toMove === 0 && r.flight.cut_off_at && new Date(r.flight.cut_off_at).getTime() <= now));
+  const c = selected ? read((s, u) => fl.closureChecklist(s, selected, u, { now: Date.now() }), null) : null;
+  el.innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Closure</h1><p class="page-subtitle">A flight closes when every bag is accounted for and nothing High or Critical is open</p></div>
     </div>
-
-    <div class="card" style="margin-block-end:var(--s5)">
-      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:var(--s2)">
-        <div><h2 class="section-title" style="margin:0">${esc(flight.code)}</h2><p class="fs-sm muted">${esc(flight.route)}</p></div>
-        ${statusChip(flight.closed ? 'Closed' : flight.status)}
+    ${c ? `<section class="card mb">
+      <h2 class="section-title">${esc(c.flight.code)}</h2>
+      ${checklistHtml(c)}
+      <div class="row gap-2 wrap mt">
+        ${c.flight.status === 'Completed'
+    ? `${chip(`Closed ${fmtDateTime(c.flight.completed_at)}`, 'green')}${c.flight.closure_note ? `<span class="fs-sm muted">${esc(c.flight.closure_note)}</span>` : ''}`
+    : `<button type="button" class="btn btn-primary" id="close-go" ${c.canClose ? '' : 'disabled'}>Close flight</button>`}
+        <button type="button" class="btn btn-ghost" id="clear">Pick another flight</button>
       </div>
-    </div>
+    </section>` : ''}
+    <section class="card">
+      <h2 class="section-title">Flights ready for closure</h2>
+      <div class="table-wrap"><table><thead><tr><th>Flight</th><th>Cut-off</th><th>Status</th><th class="num">Bags</th><th class="num">Accounted</th><th class="num">Outstanding</th><th></th></tr></thead>
+        <tbody>${closable.map(candidateRow).join('') || `<tr><td colspan="7">${emptyState({ message: 'No flight is ready for closure yet.' })}</td></tr>`}</tbody></table></div>
+    </section>`;
 
-    ${needsApproval ? `<p class="fs-sm" style="color:var(--warning);margin-block-end:var(--s4)">${icon('alert-triangle', 16)} Approve flight closure in Reconciliation before closing.</p>` : ''}
-    ${flight.closed ? `<p class="fs-sm" style="color:var(--success);margin-block-end:var(--s4)">${icon('check-circle', 16)} Closed ${esc(fmtDateTime(flight.closedAt))}.</p>` : ''}
-
-    <div style="margin-block-end:var(--s5)">${items.join('')}</div>
-
-    ${!flight.closed ? `
-      <button type="button" class="btn btn-primary btn-lg" data-action="close-flight" ${canClose ? '' : 'disabled'}>${icon('flag', 16)} Close flight</button>
-      ${!canClose ? `<p class="fs-sm muted" style="margin-block-start:var(--s2)">${needsApproval ? 'Approve flight closure in Reconciliation before closing.' : 'Resolve all discrepancies in Reconciliation first.'}</p>` : ''}
-    ` : `<a class="btn btn-secondary" href="#/closure">${icon('archive', 16)} Back to archive</a>`}
-  `;
-
-  appEl.querySelector('[data-action="close-flight"]')?.addEventListener('click', () => closeFlightFlow(flight));
+  el.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', () => { selected = b.getAttribute('data-pick'); draw(); }));
+  el.querySelector('#clear')?.addEventListener('click', () => { selected = null; navigate('#/closure'); draw(); });
+  el.querySelector('#close-go')?.addEventListener('click', () => openClose(selected, c.flight.code));
 }
 
-async function closeFlightFlow(flight) {
-  const confirmed = await confirmDialog({
-    title: 'Close flight?',
-    body: `${fmtNumber(flight.checkpoints.c)} of ${fmtNumber(flight.totalBags)} bags ${flight.checkpointLabels[2].toLowerCase()} on ${flight.code}. Closing finalizes the flight and cannot be undone.`,
-    confirmLabel: 'Close flight',
+function openClose(id, code) {
+  const d = openDrawer({
+    title: `Close ${code}`,
+    bodyHtml: `
+      <p class="text-2">Closing records the flight as complete. Its bags stay exactly as they are; nothing is deleted.</p>
+      <div class="field"><label for="cl-note">Closing note</label><textarea id="cl-note" rows="3" placeholder="All bags accounted for; travelers contacted."></textarea></div>`,
+    footerHtml: '<button type="button" class="btn btn-primary" id="cl-go">Close flight</button>',
   });
-  if (!confirmed) return;
-  try {
-    await api.closeFlight(flight.id);
-    toast(`${flight.code} closed.`, 'success');
-    load();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+  d.el.querySelector('#cl-go').addEventListener('click', async () => {
+    if (!(await confirmDialog({ title: `Close ${code}?`, body: 'The flight will be marked Completed.', confirmLabel: 'Close flight' }))) return;
+    run((s, c) => fl.closeFlight(s, id, { note: /** @type {HTMLTextAreaElement} */ (d.el.querySelector('#cl-note')).value }, c),
+      (res) => `${res.flight.code} closed.`, () => { closeDrawer(); draw(); });
+  });
 }

@@ -1,371 +1,136 @@
-import * as api from '../api.js';
-import {
-  skeletonBlock, errorState, emptyState, fmtDateTime, fmtNumber, fmtPercent, toCsv, downloadBlob, esc, icon,
-} from '../ui.js';
-import { kpiTile } from '../components/kpi-tile.js';
-import { statusChip } from '../components/status-chip.js';
-import { createDataTable } from '../components/data-table.js';
-
-let appEl = null;
-let activeTab = 'shift';
-
-let shiftState = { status: 'idle', data: null, error: null };
-let kpiState = { status: 'idle', data: null, error: null };
-let postSeasonState = { status: 'idle', data: null, error: null };
-
-let kpiTable = null;
-let postFlightTable = null;
-const charts = { onTime: null, excType: null, rates: null };
-
-const TABS = [
-  { id: 'shift', label: 'Shift report' },
-  { id: 'kpi', label: 'KPI review' },
-  { id: 'postseason', label: 'Post-season report' },
-];
-
 /**
- * Renders the reports view.
- * @param {object} params
- * @param {HTMLElement} app
- * @returns {{destroy: Function}}
+ * Reports — one roll-up over a chosen time range, plus CSV exports of the bag, exception and
+ * scan ledgers. Every number comes from shared/services/reportService.js.
  */
-export function render(params, app) {
-  appEl = app;
-  renderPage();
-  return { destroy };
+import { read, chip, levelColor } from '../data.js';
+import * as rep from '../../../shared/services/reportService.js';
+import { esc, fmtDateTime, downloadBlob, emptyState } from '../ui.js';
+import { kpiTile } from '../components/kpi-tile.js';
+
+let el = null;
+let hours = 24;
+
+export function render(params, app) { el = app; draw(); return { destroy, refresh: draw, poll: draw }; }
+export function destroy() { el = null; }
+
+const stat = (k, v) => `<div><span class="k">${esc(k)}</span><span class="v">${esc(v ?? '—')}</span></div>`;
+const mins = (n) => (n == null ? '—' : `${n} min`);
+
+function section(title, body) {
+  return `<section class="card"><h2 class="section-title">${esc(title)}</h2>${body}</section>`;
 }
 
-/** Destroys the reports view, releasing chart instances and table listeners. */
-export function destroy() {
-  destroyCharts();
-  if (kpiTable) { kpiTable.destroy(); kpiTable = null; }
-  if (postFlightTable) { postFlightTable.destroy(); postFlightTable = null; }
-  appEl = null;
+function flightTable(r) {
+  return `<div class="table-wrap"><table><thead><tr>
+      <th>Flight</th><th>Cut-off</th><th class="num">Bags</th><th class="num">To move</th><th class="num">Accounted</th>
+      <th class="num">Residence→WH</th><th class="num">WH dwell</th><th class="num">WH→Airport</th><th>State</th></tr></thead>
+    <tbody>${r.flights.map((f) => `<tr>
+      <td>${esc(f.flight.code)}</td>
+      <td>${esc(fmtDateTime(f.flight.cut_off_at))}</td>
+      <td class="num">${f.counts.total}</td>
+      <td class="num">${f.counts.toMove}</td>
+      <td class="num">${f.counts.accounted}</td>
+      <td class="num">${esc(mins(f.avgResidenceToWarehouseMin))}</td>
+      <td class="num">${esc(mins(f.avgWarehouseDwellMin))}</td>
+      <td class="num">${esc(mins(f.avgWarehouseToAirportMin))}</td>
+      <td>${['Cancelled', 'Completed'].includes(f.flight.status)
+    ? chip(f.flight.status, f.flight.status === 'Cancelled' ? 'red' : 'green')
+    : chip(f.level === 'green' ? 'On schedule' : f.level === 'red' ? 'Red' : 'Amber', levelColor(f.level === 'green' ? null : f.level))}</td>
+    </tr>`).join('') || '<tr><td colspan="9" class="muted">No flights.</td></tr>'}</tbody></table></div>`;
 }
 
-function destroyCharts() {
-  charts.onTime?.destroy(); charts.onTime = null;
-  charts.excType?.destroy(); charts.excType = null;
-  charts.rates?.destroy(); charts.rates = null;
-}
-
-function renderPage() {
-  if (!appEl) return;
-  appEl.innerHTML = `
+function draw() {
+  if (!el) return;
+  const r = read((s, u) => rep.opsReport(s, u, { now: Date.now(), sinceHours: hours }), null);
+  if (!r) { el.innerHTML = emptyState({ message: 'Reports are not available for this account.' }); return; }
+  el.innerHTML = `
     <div class="page-header">
-      <div><h1 class="page-title">Reports</h1><p class="page-subtitle">Generate shift, KPI and post-season reports for stakeholders.</p></div>
-    </div>
-    <div class="tabs" role="tablist">
-      ${TABS.map((t) => `<button type="button" class="tab" role="tab" aria-selected="${activeTab === t.id}" data-tab="${t.id}">${esc(t.label)}</button>`).join('')}
-    </div>
-    <div id="reports-tab-root"></div>`;
-  appEl.querySelectorAll('[data-tab]').forEach((btn) => btn.addEventListener('click', () => onTabClick(btn.dataset.tab)));
-  if (activeTab === 'kpi' && kpiState.status === 'idle') loadKpi();
-  else renderTabRoot();
-}
-
-function onTabClick(tab) {
-  if (tab === activeTab) return;
-  activeTab = tab;
-  appEl.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === activeTab)));
-  if (activeTab === 'kpi' && kpiState.status === 'idle') loadKpi();
-  else renderTabRoot();
-}
-
-function renderTabRoot() {
-  if (!appEl) return;
-  destroyCharts();
-  if (kpiTable) { kpiTable.destroy(); kpiTable = null; }
-  if (postFlightTable) { postFlightTable.destroy(); postFlightTable = null; }
-  const root = appEl.querySelector('#reports-tab-root');
-  if (!root) return;
-  if (activeTab === 'shift') {
-    root.innerHTML = shiftTabHtml();
-    bindShiftTab(root);
-  } else if (activeTab === 'kpi') {
-    root.innerHTML = kpiTabHtml();
-    bindKpiTab(root);
-  } else {
-    root.innerHTML = postSeasonTabHtml();
-    bindPostSeasonTab(root);
-  }
-}
-
-/* ===================== Shift report ===================== */
-
-function shiftTabHtml() {
-  const header = `
-    <div class="row gap-2 wrap" style="margin-block-end:var(--s4)">
-      <button type="button" class="btn btn-primary" data-action="generate-shift" ${shiftState.status === 'loading' ? 'disabled aria-busy="true"' : ''}>${icon('refresh-cw', 16)} Generate shift report</button>
-      ${shiftState.status === 'success' ? `
-        <button type="button" class="btn btn-secondary" data-action="print-shift">${icon('printer', 16)} Print</button>
-        <button type="button" class="btn btn-secondary" data-action="csv-shift">${icon('download', 16)} Export CSV</button>` : ''}
-    </div>`;
-  let body;
-  if (shiftState.status === 'loading') body = skeletonBlock(6);
-  else if (shiftState.status === 'error') body = errorState({ message: shiftState.error, retryAttr: 'data-action="retry-shift"' });
-  else if (shiftState.status === 'success') body = shiftReportHtml(shiftState.data);
-  else body = emptyState({ message: 'Generate a shift report to see bag volumes per stage and exception counts for the last shift window.' });
-  return header + body;
-}
-
-function shiftReportHtml(data) {
-  const stageRows = data.volumesPerStage.length ? `
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th scope="col">Stage</th><th scope="col">Bag count</th></tr></thead>
-        <tbody>${data.volumesPerStage.map((r) => `
-          <tr><td data-label="Stage">${esc(r.stage)}</td><td data-label="Bag count">${fmtNumber(r.count)}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>` : emptyState({ message: 'No stage volume data available for this window.' });
-
-  return `
-    <p class="fs-sm muted" style="margin-block-end:var(--s4)">Generated ${esc(fmtDateTime(data.generatedAt))} · covering the last ${data.windowHours} hours</p>
-    <div class="grid grid-auto" style="margin-block-end:var(--s6)">
-      ${kpiTile({ label: 'Exceptions opened', value: fmtNumber(data.exceptionsOpened) })}
-      ${kpiTile({ label: 'Exceptions closed', value: fmtNumber(data.exceptionsClosed) })}
-      ${kpiTile({ label: 'Delays', value: fmtNumber(data.delays) })}
-      ${kpiTile({ label: 'Cut-off misses', value: fmtNumber(data.cutoffMisses) })}
-    </div>
-    <h2 class="section-title">Volumes per stage</h2>
-    ${stageRows}`;
-}
-
-function generateShift() {
-  shiftState = { status: 'loading', data: null, error: null };
-  renderTabRoot();
-  api.shiftReport().then((data) => {
-    shiftState = { status: 'success', data, error: null };
-    renderTabRoot();
-  }).catch((err) => {
-    shiftState = { status: 'error', data: null, error: err.message };
-    renderTabRoot();
-  });
-}
-
-function bindShiftTab(root) {
-  root.querySelector('[data-action="generate-shift"]')?.addEventListener('click', generateShift);
-  root.querySelector('[data-action="retry-shift"]')?.addEventListener('click', generateShift);
-  root.querySelector('[data-action="print-shift"]')?.addEventListener('click', () => window.print());
-  root.querySelector('[data-action="csv-shift"]')?.addEventListener('click', () => {
-    const csv = toCsv(shiftState.data.volumesPerStage, ['stage', 'count']);
-    downloadBlob('shift-report.csv', csv, 'text/csv');
-  });
-}
-
-/* ===================== KPI review ===================== */
-
-function exceptionsByTypeEntries(data) {
-  return Object.entries(data.exceptionsByType).sort((a, b) => b[1] - a[1]);
-}
-
-function kpiTabHtml() {
-  if (kpiState.status === 'loading' || kpiState.status === 'idle') return skeletonBlock(8);
-  if (kpiState.status === 'error') return errorState({ message: kpiState.error, retryAttr: 'data-action="retry-kpi"' });
-
-  const data = kpiState.data;
-  if (!data.history.length) return emptyState({ message: 'No KPI history available for this period.' });
-
-  const excEntries = exceptionsByTypeEntries(data);
-
-  return `
-    <div class="grid grid-cols-2" style="align-items:start;margin-block-end:var(--s6)">
-      <div class="card">
-        <h2 class="section-title">On-time % over time</h2>
-        <canvas id="kpi-ontime-chart" role="img" aria-label="On-time percentage over the last 14 days" height="280"></canvas>
-      </div>
-      <div class="card">
-        <h2 class="section-title">Exceptions by type</h2>
-        <canvas id="kpi-exctype-chart" role="img" aria-label="Exceptions by type" height="280"></canvas>
+      <div><h1 class="page-title">Reports</h1>
+        <p class="page-subtitle">${esc(fmtDateTime(r.range.since))} → ${esc(fmtDateTime(r.range.until))}</p></div>
+      <div class="segmented" role="tablist" aria-label="Time range">
+        ${[[6, '6 h'], [24, '24 h'], [72, '3 days'], [24 * 30, 'Season']].map(([h, label]) => `
+          <button type="button" class="tab" role="tab" aria-selected="${hours === h}" data-hours="${h}">${label}</button>`).join('')}
       </div>
     </div>
-    <div class="card" style="margin-block-end:var(--s6)">
-      <h2 class="section-title">Damage, missing and delivery success rates</h2>
-      <canvas id="kpi-rates-chart" role="img" aria-label="Damage rate, missing rate and delivery success rate over the last 14 days" height="280"></canvas>
+
+    <div class="grid grid-cols-4 mb">
+      ${kpiTile({ label: 'Bags in the system', value: r.totals.bags })}
+      ${kpiTile({ label: 'Still to move', value: r.totals.bagsToMove })}
+      ${kpiTile({ label: 'Live flights', value: r.totals.flightsLive })}
+      ${kpiTile({ label: 'Open exceptions', value: r.exceptions.open })}
     </div>
 
-    <h2 class="section-title">Exceptions by type (data)</h2>
-    <div class="table-wrap" style="margin-block-end:var(--s6)">
-      <table class="data-table">
-        <thead><tr><th scope="col">Type</th><th scope="col">Count</th></tr></thead>
-        <tbody>${excEntries.map(([type, count]) => `
-          <tr><td data-label="Type">${esc(type)}</td><td data-label="Count">${fmtNumber(count)}</td></tr>`).join('')}</tbody>
-      </table>
+    ${section('Flights and window compliance', flightTable(r))}
+
+    <div class="report-grid mt">
+      ${section('Residence check-in', `<div class="stat-list">
+        ${stat('Collected', r.checkin.collected)}
+        ${stat('Traveler absent', r.checkin.absent)}
+        ${stat('Called off (flight cancelled)', r.checkin.cancelled)}
+        ${Object.entries(r.checkin.byStatus).map(([k, v]) => stat(k, v)).join('')}
+      </div>`)}
+      ${section('Transport', `<div class="stat-list">
+        ${stat('Collection trips dispatched', r.transport.tripsDispatched)}
+        ${stat('Collection trips arrived', r.transport.tripsArrived)}
+        ${stat('Airport runs', r.transport.airportTrips)}
+        ${stat('Bags moved', r.transport.bagsMoved + r.transport.airportBagsMoved)}
+        ${stat('Average pickup → warehouse', mins(r.transport.avgMinutes))}
+        ${stat('Reroutes', r.transport.reroutes)}
+      </div>`)}
+      ${section('Warehouse', `<div class="stat-list">
+        ${stat('Received in range', r.warehouse.received)}
+        ${stat('Screened in range', r.warehouse.screened)}
+        ${stat('Loaded to airport trucks', r.warehouse.loaded)}
+        ${stat('In holding now', r.warehouse.held)}
+        ${stat('Average dwell', mins(r.warehouse.avgDwellMin))}
+        ${stat('Over the 2 h timer now', r.warehouse.overTimerNow)}
+      </div>`)}
+      ${section('Airport', `<div class="stat-list">
+        ${stat('Received at the airport', r.airport.receivedAtAirport)}
+        ${stat('Handed to the Airport Authority', r.airport.handedOver)}
+        ${stat('SGS vouchers accepted', r.airport.vouchersAccepted)}
+        ${stat('Vouchers pending', r.airport.vouchersPending)}
+        ${stat('Loaded on aircraft', r.airport.loadedOnAircraft)}
+      </div>`)}
+      ${section('Exceptions', `<div class="stat-list">
+        ${stat('Open', r.exceptions.open)}
+        ${stat('Resolved in range', r.exceptions.resolvedInRange)}
+        ${stat('Average time to resolve', mins(r.exceptions.avgResolutionMin))}
+        ${Object.entries(r.exceptions.byType).map(([k, v]) => stat(k, v)).join('') || stat('By type', 'none')}
+      </div>`)}
+      ${section('Scans', `<div class="stat-list">
+        ${stat('Total in range', r.scans.total)}
+        ${stat('Refused', r.scans.failed)}
+        ${Object.entries(r.scans.byMethod).map(([k, v]) => stat(k, v)).join('')}
+      </div>`)}
+      ${section('Bags by status', `<div class="stat-list">
+        ${Object.entries(r.bags.byStatus).filter(([, v]) => v > 0).map(([k, v]) => stat(k, v)).join('') || stat('No bags', 0)}
+      </div>`)}
     </div>
 
-    <h2 class="section-title">History (14 days)</h2>
-    <div id="kpi-history-table"></div>`;
-}
-
-function bindKpiTab(root) {
-  root.querySelector('[data-action="retry-kpi"]')?.addEventListener('click', loadKpi);
-  if (kpiState.status !== 'success' || !kpiState.data.history.length) return;
-
-  const data = kpiState.data;
-  const tableRoot = root.querySelector('#kpi-history-table');
-  if (tableRoot) {
-    kpiTable = createDataTable(tableRoot, {
-      rows: data.history,
-      getRowId: (r) => r.date,
-      searchKeys: ['date'],
-      csvFilename: 'kpi-history',
-      emptyMessage: 'No KPI history available.',
-      columns: [
-        { key: 'date', label: 'Date', sortable: true },
-        { key: 'onTimePct', label: 'On-time %', sortable: true, render: (r) => fmtPercent(r.onTimePct) },
-        { key: 'avgHandlingMin', label: 'Avg handling (min)', sortable: true, render: (r) => fmtNumber(r.avgHandlingMin) },
-        { key: 'exceptionsOpened', label: 'Exceptions opened', sortable: true, render: (r) => fmtNumber(r.exceptionsOpened) },
-        { key: 'exceptionsClosed', label: 'Exceptions closed', sortable: true, render: (r) => fmtNumber(r.exceptionsClosed) },
-        { key: 'damageRatePct', label: 'Damage rate', sortable: true, render: (r) => fmtPercent(r.damageRatePct) },
-        { key: 'missingRatePct', label: 'Missing rate', sortable: true, render: (r) => fmtPercent(r.missingRatePct) },
-        { key: 'deliverySuccessPct', label: 'Delivery success', sortable: true, render: (r) => fmtPercent(r.deliverySuccessPct) },
-      ],
-    });
-  }
-  drawKpiCharts(root, data);
-}
-
-function drawKpiCharts(root, data) {
-  destroyCharts();
-  if (!window.Chart) return;
-  const styles = getComputedStyle(document.documentElement);
-  const accent = styles.getPropertyValue('--accent').trim() || '#0D9488';
-  const danger = styles.getPropertyValue('--danger').trim() || '#DC2626';
-  const warning = styles.getPropertyValue('--warning').trim() || '#D97706';
-  const success = styles.getPropertyValue('--success').trim() || '#16A34A';
-
-  const sortedHistory = [...data.history].sort((a, b) => a.date.localeCompare(b.date));
-  const labels = sortedHistory.map((r) => r.date);
-
-  const onTimeCanvas = root.querySelector('#kpi-ontime-chart');
-  if (onTimeCanvas) {
-    charts.onTime?.destroy();
-    charts.onTime = new window.Chart(onTimeCanvas, {
-      type: 'line',
-      data: { labels, datasets: [{ label: 'On-time %', data: sortedHistory.map((r) => r.onTimePct), borderColor: accent, backgroundColor: accent, tension: 0.3 }] },
-      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { title: { display: true, text: '%' } } } },
-    });
-  }
-
-  const excEntries = exceptionsByTypeEntries(data);
-  const excCanvas = root.querySelector('#kpi-exctype-chart');
-  if (excCanvas) {
-    charts.excType?.destroy();
-    charts.excType = new window.Chart(excCanvas, {
-      type: 'bar',
-      data: { labels: excEntries.map((e) => e[0]), datasets: [{ label: 'Exceptions', data: excEntries.map((e) => e[1]), backgroundColor: accent }] },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true, title: { display: true, text: 'Count' } } },
-      },
-    });
-  }
-
-  const ratesCanvas = root.querySelector('#kpi-rates-chart');
-  if (ratesCanvas) {
-    charts.rates?.destroy();
-    charts.rates = new window.Chart(ratesCanvas, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Delivery success %', data: sortedHistory.map((r) => r.deliverySuccessPct), borderColor: success, backgroundColor: success, tension: 0.3 },
-          { label: 'Damage rate %', data: sortedHistory.map((r) => r.damageRatePct), borderColor: danger, backgroundColor: danger, tension: 0.3 },
-          { label: 'Missing rate %', data: sortedHistory.map((r) => r.missingRatePct), borderColor: warning, backgroundColor: warning, tension: 0.3 },
-        ],
-      },
-      options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true, title: { display: true, text: '%' } } } },
-    });
-  }
-}
-
-function loadKpi() {
-  kpiState = { status: 'loading', data: null, error: null };
-  renderTabRoot();
-  api.kpis().then((data) => {
-    kpiState = { status: 'success', data, error: null };
-    renderTabRoot();
-  }).catch((err) => {
-    kpiState = { status: 'error', data: null, error: err.message };
-    renderTabRoot();
-  });
-}
-
-/* ===================== Post-season report ===================== */
-
-function postSeasonTabHtml() {
-  const header = `
-    <div class="row gap-2 wrap" style="margin-block-end:var(--s4)">
-      <button type="button" class="btn btn-primary" data-action="generate-postseason" ${postSeasonState.status === 'loading' ? 'disabled aria-busy="true"' : ''}>${icon('refresh-cw', 16)} Generate post-season report</button>
-      ${postSeasonState.status === 'success' ? `
-        <button type="button" class="btn btn-secondary" data-action="print-postseason">${icon('printer', 16)} Print</button>
-        <button type="button" class="btn btn-secondary" data-action="csv-postseason">${icon('download', 16)} Export CSV</button>` : ''}
+    <div class="toolbar mt">
+      <button type="button" class="btn btn-secondary" data-csv="bags">Export bags CSV</button>
+      <button type="button" class="btn btn-secondary" data-csv="exceptions">Export exceptions CSV</button>
+      <button type="button" class="btn btn-secondary" data-csv="scans">Export scans CSV</button>
     </div>`;
-  let body;
-  if (postSeasonState.status === 'loading') body = skeletonBlock(6);
-  else if (postSeasonState.status === 'error') body = errorState({ message: postSeasonState.error, retryAttr: 'data-action="retry-postseason"' });
-  else if (postSeasonState.status === 'success') body = `<div id="postseason-body"></div>`;
-  else body = emptyState({ message: 'Generate the post-season report to see totals and flight-by-flight outcomes.' });
-  return header + body;
+
+  el.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => { hours = Number(b.getAttribute('data-hours')); draw(); }));
+  el.querySelectorAll('[data-csv]').forEach((b) => b.addEventListener('click', () => exportCsv(b.getAttribute('data-csv'))));
 }
 
-function renderPostSeasonBody(root) {
-  if (postSeasonState.status !== 'success') return;
-  const container = root.querySelector('#postseason-body');
-  if (!container) return;
-  const data = postSeasonState.data;
-  container.innerHTML = `
-    <p class="fs-sm muted" style="margin-block-end:var(--s4)">Generated ${esc(fmtDateTime(data.generatedAt))}</p>
-    <div class="grid grid-auto" style="margin-block-end:var(--s6)">
-      ${kpiTile({ label: 'Total flights', value: fmtNumber(data.totalFlights) })}
-      ${kpiTile({ label: 'Total bags', value: fmtNumber(data.totalBags) })}
-      ${kpiTile({ label: 'Total exceptions', value: fmtNumber(data.totalExceptions) })}
-    </div>
-    <h2 class="section-title">Flights</h2>
-    <div id="postseason-flight-table"></div>`;
+const COLUMNS = {
+  bags: ['bag_id', 'tag_no', 'airline_tag_no', 'status', 'traveler', 'nusuk_id', 'flight', 'flight_status', 'area', 'weight_kg', 'extra',
+    'checked_in_at', 'received_at_warehouse_at', 'screened_at', 'received_at_airport_at', 'loaded_on_aircraft_at', 'updated_at'],
+  exceptions: ['id', 'type', 'severity', 'status', 'raised_at', 'raised_by', 'owner', 'bag_id', 'flight_id', 'area_id', 'value', 'notes', 'resolution', 'resolved_at', 'closed_at'],
+  scans: ['id', 'at', 'step', 'method', 'symbology', 'result', 'raw_value', 'user_id', 'bag_id', 'flight_id', 'device_id'],
+};
 
-  if (!data.byFlight.length) {
-    container.querySelector('#postseason-flight-table').outerHTML = emptyState({ message: 'No flights recorded this season.' });
-    return;
-  }
-
-  postFlightTable = createDataTable(container.querySelector('#postseason-flight-table'), {
-    rows: data.byFlight,
-    getRowId: (r) => r.flight,
-    searchKeys: ['flight', 'direction', 'status'],
-    csvFilename: 'post-season-flights',
-    emptyMessage: 'No flights match this search.',
-    columns: [
-      { key: 'flight', label: 'Flight', sortable: true },
-      { key: 'direction', label: 'Direction', sortable: true, render: (r) => esc(r.direction === 'departure' ? 'Departure' : 'Arrival') },
-      { key: 'totalBags', label: 'Total bags', sortable: true, render: (r) => fmtNumber(r.totalBags) },
-      { key: 'delivered', label: 'Delivered', sortable: true, render: (r) => fmtNumber(r.delivered) },
-      { key: 'status', label: 'Status', sortable: true, render: (r) => statusChip(r.status) },
-    ],
-  });
-}
-
-function generatePostSeason() {
-  postSeasonState = { status: 'loading', data: null, error: null };
-  renderTabRoot();
-  api.postSeason().then((data) => {
-    postSeasonState = { status: 'success', data, error: null };
-    renderTabRoot();
-  }).catch((err) => {
-    postSeasonState = { status: 'error', data: null, error: err.message };
-    renderTabRoot();
-  });
-}
-
-function bindPostSeasonTab(root) {
-  root.querySelector('[data-action="generate-postseason"]')?.addEventListener('click', generatePostSeason);
-  root.querySelector('[data-action="retry-postseason"]')?.addEventListener('click', generatePostSeason);
-  root.querySelector('[data-action="print-postseason"]')?.addEventListener('click', () => window.print());
-  root.querySelector('[data-action="csv-postseason"]')?.addEventListener('click', () => {
-    const csv = toCsv(postSeasonState.data.byFlight, ['flight', 'direction', 'totalBags', 'delivered', 'status']);
-    downloadBlob('post-season-report.csv', csv, 'text/csv');
-  });
-  renderPostSeasonBody(root);
+function exportCsv(kind) {
+  const since = Date.now() - hours * 3600e3;
+  const rows = read((s, u) => (kind === 'bags' ? rep.bagLedger(s, u, {})
+    : kind === 'exceptions' ? rep.exceptionLedger(s, u)
+      : rep.scanLedger(s, u, { since })), []);
+  if (!rows) return;
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  downloadBlob(`rabel-${kind}-${stamp}.csv`, rep.toCsv(COLUMNS[kind], rows), 'text/csv');
 }

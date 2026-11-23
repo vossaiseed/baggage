@@ -39,7 +39,13 @@ function findFlight(state, id) {
   return f;
 }
 
-const bagsOf = (state, flightId) => (state.bags || []).filter((b) => b.flight_id === flightId);
+/**
+ * The bags Ops counts: pre-v7 rows imported from the old per-app stores (`legacy: true`) are
+ * read-only history — they can never move through the v7 line, so counting them would inflate
+ * every flight and block a closure forever.
+ */
+const liveBags = (state) => (state.bags || []).filter((b) => !b.legacy);
+const bagsOf = (state, flightId) => liveBags(state).filter((b) => b.flight_id === flightId);
 const idx = (status) => statusIndex(status);
 const fmtTime = (iso) => (iso ? new Date(iso).toISOString().slice(11, 16) : '—');
 
@@ -89,7 +95,7 @@ function flightRow(state, flight, { now, rank = null }) {
  */
 export function listFlights(state, user, { now = Date.now() } = {}) {
   assertCan(user, 'flight:read');
-  const ranks = new Map(forecast(state.flights, state.bags, now).map((f) => [f.id, f.priority_rank]));
+  const ranks = new Map(forecast(state.flights, liveBags(state), now).map((f) => [f.id, f.priority_rank]));
   const rows = scopeFilter(user, 'flights', state.flights)
     .filter((f) => !f.legacy)
     .map((f) => flightRow(state, f, { now, rank: ranks.get(f.id) ?? null }));
@@ -106,7 +112,7 @@ export function listFlights(state, user, { now = Date.now() } = {}) {
 export function flightDetail(state, flightId, user, { now = Date.now() } = {}) {
   assertCan(user, 'flight:read');
   const flight = findFlight(state, flightId);
-  const row = flightRow(state, flight, { now, rank: forecast(state.flights, state.bags, now).find((f) => f.id === flight.id)?.priority_rank ?? null });
+  const row = flightRow(state, flight, { now, rank: forecast(state.flights, liveBags(state), now).find((f) => f.id === flight.id)?.priority_rank ?? null });
   const bags = bagsOf(state, flight.id).map((b) => ({
     bag: b,
     traveler: (state.travelers || []).find((t) => t.id === b.traveler_id) || null,
@@ -130,7 +136,7 @@ export function flightDetail(state, flightId, user, { now = Date.now() } = {}) {
 export function forecastBoard(state, user, { now = Date.now() } = {}) {
   assertCan(user, 'flight:read');
   const visible = new Set(scopeFilter(user, 'flights', state.flights).map((f) => f.id));
-  return forecast(state.flights, state.bags, now)
+  return forecast(state.flights, liveBags(state), now)
     .filter((f) => visible.has(f.id))
     .map((f) => {
       const flight = findFlight(state, f.id);
@@ -334,7 +340,7 @@ export function rebookBags(state, input, ctx) {
   // The traveler follows their bags only when every bag they had on the old flight moved.
   const travelersMoved = [];
   for (const t of state.travelers || []) {
-    const theirs = (state.bags || []).filter((b) => b.traveler_id === t.id);
+    const theirs = liveBags(state).filter((b) => b.traveler_id === t.id);
     if (!theirs.length || !theirs.some((b) => rebooked.includes(b.id))) continue;
     if (theirs.every((b) => b.flight_id === target.id)) {
       if (t.flight_id !== target.id) {

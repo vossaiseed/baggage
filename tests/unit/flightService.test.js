@@ -90,6 +90,15 @@ describe('flight board', () => {
     expect(d.counts.byStatus['Received at Warehouse']).toBe(8);
   });
 
+  it('leaves pre-v7 (legacy) bags out of every count — they can never move through the v7 line', () => {
+    s.bags.push({ id: 'BAG-OLD-1', traveler_id: 'TRV-OLD', flight_id: SV, status: 'Checked-in', legacy: true, status_history: [] });
+    const before = row(fl.listFlights(s, OPS, { now: NOW }), SV).counts.total;
+    expect(before).toBe(s.bags.filter((b) => b.flight_id === SV && !b.legacy).length);
+    expect(fl.flightDetail(s, SV, OPS, { now: NOW }).bags.map((b) => b.bag.id)).not.toContain('BAG-OLD-1');
+    // and it must never block a closure
+    expect(fl.closureChecklist(s, SV, OPS, { now: NOW }).outstanding.map((o) => o.bag.id)).not.toContain('BAG-OLD-1');
+  });
+
   it('only a role with flight:read may see the board', () => {
     expect(() => fl.listFlights(s, trav('2000000001'), { now: NOW })).toThrow(PermissionError);
   });
