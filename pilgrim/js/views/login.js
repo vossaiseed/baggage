@@ -41,7 +41,7 @@ export function render(params, app) {
             <span class="label">Login with Nusuk</span>
           </button>
         </form>
-        <p class="fs-sm muted" style="margin-block-start:var(--s5);text-align:center">Demo pilgrims</p>
+        <p class="fs-sm muted" style="margin-block-start:var(--s5);text-align:center">Demo travelers</p>
         <div class="demo-chip-list" style="justify-content:center">
           ${DEMO_PILGRIMS.map((d, i) => `<button type="button" class="demo-chip" data-demo="${i}">${d.label}</button>`).join('')}
         </div>

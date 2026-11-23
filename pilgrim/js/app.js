@@ -7,7 +7,16 @@ import * as api from './api.js';
 import { route, setGuard, setNotFound, startRouter, navigate, getCurrent } from './router.js';
 import { icon, toast, esc } from './ui.js';
 
-import * as loginView from './views/login.js';
+import * as loginView from './v7/login.js';
+import * as v7Api from './v7/api.js';
+import * as v7Home from './v7/home.js';
+import * as v7Book from './v7/book.js';
+import * as v7Booking from './v7/booking.js';
+import * as v7Track from './v7/track.js';
+import * as v7Receipt from './v7/receipt.js';
+import * as v7Support from './v7/support.js';
+import * as v7Profile from './v7/profile.js';
+import * as v7Notifications from './v7/notifications.js';
 import * as homeView from './views/home.js';
 import * as bookView from './views/book.js';
 import * as bookingView from './views/booking.js';
@@ -27,7 +36,7 @@ window.RABEL_DEBUG = window.RABEL_DEBUG || false;
 
 const TAB_ITEMS = [
   { hash: '#/', prefixes: ['/'], label: 'Home', iconName: 'home' },
-  { hash: '#/book', prefixes: ['/book', '/booking'], label: 'Book', iconName: 'calendar-plus' },
+  { hash: '#/book', prefixes: ['/book', '/booking'], label: 'Book', iconName: 'calendar-plus', v7Only: true },
   { hash: '#/track', prefixes: ['/track', '/bag', '/receipt', '/arrival'], label: 'Track', iconName: 'package-search' },
   { hash: '#/support', prefixes: ['/support', '/ticket'], label: 'Support', iconName: 'life-buoy' },
   { hash: '#/profile', prefixes: ['/profile', '/notifications'], label: 'Profile', iconName: 'user' },
@@ -79,7 +88,7 @@ function mountBare() {
 
 function tabBarHtml() {
   const path = currentPath();
-  return TAB_ITEMS.map((item) => `
+  return TAB_ITEMS.filter((item) => !item.v7Only || v7Api.isV7()).map((item) => `
     <a class="tab-link" href="${item.hash}" ${isTabActive(item, path) ? 'aria-current="page"' : ''}>
       ${icon(item.iconName, 22)}<span>${esc(item.label)}</span>
     </a>`).join('');
@@ -124,9 +133,15 @@ function updateTabHighlight() {
   if (bar) { bar.innerHTML = tabBarHtml(); renderIcons(); }
 }
 
+/** Departure v7 travelers read the shared store; arrival demo travelers use the legacy api. */
+const notifApi = {
+  list: async () => (v7Api.isV7() ? v7Api.notifications() : api.getNotifications()),
+  markRead: async (id) => (v7Api.isV7() ? v7Api.markRead(id) : api.markRead(id)),
+};
+
 async function refreshBellBadge() {
   try {
-    const notifications = await api.getNotifications();
+    const notifications = await notifApi.list();
     const count = notifications.filter((n) => n.unread).length;
     const badge = document.getElementById('bell-badge-count');
     if (badge) {
@@ -150,7 +165,7 @@ async function openBellDropdown() {
   dd.innerHTML = `<div class="skeleton skeleton-row" style="margin:var(--s4)"></div>`;
   wrap.appendChild(dd);
   try {
-    const notifications = await api.getNotifications();
+    const notifications = await notifApi.list();
     if (!notifications.length) {
       dd.innerHTML = `<div class="bell-item"><span class="muted fs-sm">No notifications.</span></div>`;
       return;
@@ -171,12 +186,12 @@ async function openBellDropdown() {
     `;
     dd.querySelector('[data-act="mark-all"]')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      await api.markRead('all');
+      await notifApi.markRead('all');
       closeAllDropdowns();
       refreshBellBadge();
     });
     dd.querySelectorAll('[data-notif-id]').forEach((a) => a.addEventListener('click', async () => {
-      await api.markRead(a.dataset.notifId);
+      await notifApi.markRead(a.dataset.notifId);
       refreshBellBadge();
     }));
   } catch (e) {
@@ -191,6 +206,13 @@ function openProfileDropdown() {
   const dd = document.createElement('div');
   dd.className = 'bell-dropdown';
   const demoOn = isDemoMode();
+  if (v7Api.isV7()) {
+    dd.innerHTML = `<button type="button" class="bell-item" style="color:var(--danger)" data-act="logout">${icon('log-out', 16)} Log out</button>`;
+    wrap.appendChild(dd);
+    renderIcons();
+    dd.addEventListener('click', (e) => { if (e.target.closest('[data-act="logout"]')) { closeAllDropdowns(); v7Api.logout(); window.location.href = '../index.html'; } });
+    return;
+  }
   dd.innerHTML = `
     <button type="button" class="bell-item" data-act="toggle-demo">${icon('flask-conical', 16)} <span style="flex:1">Demo mode</span> ${demoOn ? '<span class="chip chip-green">On</span>' : ''}</button>
     ${demoOn ? `
@@ -257,18 +279,23 @@ function wrapView(view) {
   };
 }
 
+/** v7 travelers get the Departure v7 screen; arrival demo travelers keep the legacy one. */
+function dual(v7View, legacyView) {
+  return (params, app) => wrapView(v7Api.isV7() ? v7View : legacyView)(params, app);
+}
+
 function registerRoutes() {
   route('/login', (params, app) => {
     mountBare();
     return loginView.render(params, document.getElementById('app')) || { destroy: loginView.destroy };
   });
-  route('/', wrapView(homeView));
-  route('/book', wrapView(bookView));
-  route('/booking/:id', wrapView(bookingView));
-  route('/track', wrapView(trackView));
+  route('/', dual(v7Home, homeView));
+  route('/book', dual(v7Book, bookView));
+  route('/booking/:id', dual(v7Booking, bookingView));
+  route('/track', dual(v7Track, trackView));
   route('/bag/:id', wrapView(bagView));
-  route('/receipt/:id', wrapView(receiptView));
-  route('/support', wrapView(supportView));
+  route('/receipt/:id', dual(v7Receipt, receiptView));
+  route('/support', dual(v7Support, supportView));
   route('/support/new', wrapView(supportView));
   route('/ticket/:id', wrapView(supportView));
   route('/arrival', wrapView(arrivalView));
@@ -276,8 +303,8 @@ function registerRoutes() {
   route('/arrival/resolution', wrapView(resolutionView));
   route('/arrival/rate', wrapView(rateView));
   route('/arrival/complete', wrapView(completeView));
-  route('/notifications', wrapView(notificationsView));
-  route('/profile', wrapView(profileView));
+  route('/notifications', dual(v7Notifications, notificationsView));
+  route('/profile', dual(v7Profile, profileView));
 
   setNotFound((app) => {
     mountShell();
@@ -290,6 +317,10 @@ function registerRoutes() {
   });
 
   setGuard((path) => {
+    // Arrival-demo travelers have no city check-in booking any more (departure is the v7 residence collection).
+    if (!v7Api.isV7() && (path === '/book' || path.startsWith('/booking/'))) return '#/';
+    // v7 (departure) travelers have no arrival/legacy-bag screens.
+    if (v7Api.isV7() && (path.startsWith('/arrival') || path.startsWith('/bag/') || path.startsWith('/ticket/') || path === '/support/new')) return '#/';
     if (path !== '/login' && !isAuthed()) return '#/login';
     if (path === '/login' && isAuthed()) return '#/';
     return true;

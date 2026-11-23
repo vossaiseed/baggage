@@ -7,3 +7,11 @@
 
 .gate-badge{background:var(--accent-soft);color:var(--accent-hover);font-size:var(--fs-xs);font-weight:var(--fw-bold);padding:2px var(--s3);border-radius:var(--r-pill)}
 [data-focus="arrival"] .gate-badge{background:var(--accent-2-soft);color:var(--accent-2-hover)}
+
+/* ── Departure v7 screens (seal check · offload · SGS handover · voucher) ───────────────── */
+
+.mb{margin-block-end:var(--s4)} .mt{margin-block-start:var(--s4)}
+
+/* a card carrying a time-rule or seal alert */
+.card.alert-amber{border-inline-start:4px solid var(--warning);background:var(--warning-soft)}
+.card.alert-red{border-inline-start:4px solid var(--danger);background:var(--danger-soft)}

@@ -3,6 +3,7 @@ import {
   esc, icon, fmtDateTime, skeletonBlock, errorState,
 } from '../ui.js';
 import { getFocus } from '../store.js';
+import { departureSectionHtml } from '../v7/dashboard-section.js';
 import { kpiTile } from '../components/kpi-tile.js';
 import { statusChip } from '../components/status-chip.js';
 
@@ -35,19 +36,18 @@ async function load() {
   const focus = getFocus();
   try {
     if (focus === 'departure') {
-      const data = await api.getDashboardDeparture();
       if (!appEl) return;
-      appEl.innerHTML = pageShell() + departureSectionHtml(data);
+      appEl.innerHTML = pageShell() + departureSectionHtml();
     } else if (focus === 'arrival') {
       const data = await api.getDashboardArrival();
       if (!appEl) return;
       appEl.innerHTML = pageShell() + arrivalSectionHtml(data);
     } else {
-      const [dep, arr] = await Promise.all([api.getDashboardDeparture(), api.getDashboardArrival()]);
+      const arr = await api.getDashboardArrival();
       if (!appEl) return;
       appEl.innerHTML = `${pageShell()}
         <h2 class="section-title">Departure</h2>
-        ${departureSectionHtml(dep)}
+        ${departureSectionHtml()}
         <h2 class="section-title">Arrival</h2>
         ${arrivalSectionHtml(arr)}`;
     }
@@ -56,31 +56,6 @@ async function load() {
     appEl.innerHTML = pageShell() + errorState({ message: err.message });
     appEl.querySelector('[data-action="retry"]')?.addEventListener('click', load);
   }
-}
-
-function departureSectionHtml(d) {
-  return `
-    <div class="grid grid-auto" style="margin-block-end:var(--s6)">
-      ${kpiTile({ label: 'En route', value: d.enRoute })}
-      ${kpiTile({ label: 'At gate', value: d.atGate })}
-      ${kpiTile({ label: 'Received today', value: d.receivedToday })}
-      ${kpiTile({ label: 'Awaiting airline handover', value: d.awaitingHandover })}
-      ${kpiTile({ label: 'Handed today', value: d.handedToday })}
-      ${kpiTile({ label: 'Open exceptions', value: d.openExceptions })}
-    </div>
-    <div class="card" style="margin-block-end:var(--s6)">
-      <div class="section-title">Flights closing</div>
-      ${flightsClosingHtml(d.flightsClosing)}
-    </div>`;
-}
-
-function flightsClosingHtml(list) {
-  if (!list.length) return `<p class="fs-sm muted">No flights are currently closing.</p>`;
-  return `<div class="stack gap-2">${list.map((f) => `
-    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:var(--s2);padding:var(--s2) 0;border-bottom:1px solid var(--border)">
-      <div><strong class="mono">${esc(f.flightCode)}</strong> <span class="fs-xs muted">&middot; ${f.bagCount} bag${f.bagCount === 1 ? '' : 's'}</span></div>
-      ${statusChip(f.batchStatus)}
-    </div>`).join('')}</div>`;
 }
 
 function arrivalSectionHtml(a) {

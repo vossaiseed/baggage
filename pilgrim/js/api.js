@@ -333,7 +333,7 @@ export async function confirmReceipt(bagId) {
   if (!bag) return fail('Bag not found.');
   if (bag.status !== 'Delivered') return fail('This bag has not been delivered yet.');
   bag.status = 'Confirmed by Pilgrim';
-  bag.timeline.push({ stage: 'Confirmed by Pilgrim', time: nowIso(), location: 'Room', role: 'Pilgrim', result: 'ok' });
+  bag.timeline.push({ stage: 'Confirmed by Pilgrim', time: nowIso(), location: 'Room', role: 'Traveler', result: 'ok' });
   saveStore();
   const remaining = myBags(store, 'arrival').filter((b) => !['Confirmed by Pilgrim'].includes(b.status)).length;
   return ok({ bag: hydrateBag(store, bag), allConfirmed: remaining === 0 });

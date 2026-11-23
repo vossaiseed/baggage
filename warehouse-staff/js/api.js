@@ -1,5 +1,5 @@
 /**
- * Mock REST API for the Warehouse Staff console. Every function is async,
+ * Mock REST API for the Warehouse Manager console. Every function is async,
  * resolves after a realistic delay, and can be made to reject via `?fail=1`
  * or the one-shot demo "force fail" flag. A real backend can replace this
  * file without the UI code changing.
@@ -92,9 +92,11 @@ function pushGateLog(store, entry) {
 /** @param {string} employeeId @param {string} pin */
 export async function login(employeeId, pin) {
   const store = getStore();
-  const staff = store.staff.find((s) => s.employeeId.toLowerCase() === String(employeeId).toLowerCase());
+  // v7: Warehouse Staff are now Warehouse Managers (WM-xxx). The legacy WH-xxx id still signs in.
+  const asV7 = (id) => String(id).replace(/^WH-/i, 'WM-').toLowerCase();
+  const staff = store.staff.find((s) => asV7(s.employeeId) === asV7(employeeId));
   if (!staff || staff.pin !== pin) return fail('Invalid employee ID or PIN.');
-  const session = { id: staff.id, name: staff.name, employeeId: staff.employeeId, shiftStartedAt: nowIso() };
+  const session = { id: staff.id, name: staff.name, employeeId: String(staff.employeeId).replace(/^WH-/i, 'WM-'), shiftStartedAt: nowIso() };
   setSession(session);
   saveStore();
   return ok(session);

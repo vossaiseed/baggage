@@ -2,12 +2,10 @@ import * as api from '../api.js';
 import { toast, announce, esc } from '../ui.js';
 import { navigate } from '../router.js';
 
-const CENTRES = [{ id: 'AZIZIYAH', name: 'Aziziyah' }, { id: 'AL-AWALI', name: 'Al-Awali' }, { id: 'MADINAH', name: 'Madinah' }];
 const DEMO_ACCOUNTS = [
-  { label: 'Omar', employeeId: 'CHK-001', pin: '1234', centreId: 'AZIZIYAH', hint: 'Aziziyah' },
-  { label: 'Yusuf', employeeId: 'CHK-002', pin: '1234', centreId: 'AL-AWALI', hint: 'Al-Awali' },
-  { label: 'Bilal', employeeId: 'CHK-003', pin: '1234', centreId: 'MADINAH', hint: 'Madinah' },
-  { label: 'Khalid', employeeId: 'SUP-001', pin: '1234', centreId: 'AZIZIYAH', hint: 'Supervisor' },
+  { label: 'Omar', employeeId: 'CHK-001', pin: '1234', hint: 'Aziziyah' },
+  { label: 'Yusuf', employeeId: 'CHK-002', pin: '1234', hint: 'Al-Awali' },
+  { label: 'Bilal', employeeId: 'CHK-003', pin: '1234', hint: 'Shisha' },
 ];
 
 /** @param {object} params @param {HTMLElement} app */
@@ -19,8 +17,8 @@ export function render(params, app) {
           <span class="brand-name fs-xl">Rabel</span>
           <span class="brand-ar">رابل — خدمة أمتعة الحجاج</span>
         </div>
-        <h1 class="fs-lg">Check-in terminal sign in</h1>
-        <p class="muted fs-sm" style="margin-block-end:var(--s5)">Sign in to start your shift at the counter.</p>
+        <h1 class="fs-lg">Check-in Staff sign in</h1>
+        <p class="muted fs-sm" style="margin-block-end:var(--s5)">Sign in to start your shift. You collect and tag bags at travelers' residences.</p>
         <div id="login-alert" role="alert"></div>
         <form id="login-form" novalidate>
           <div class="field">
@@ -33,20 +31,6 @@ export function render(params, app) {
             <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" required />
             <div class="error" id="err-pin" hidden></div>
           </div>
-          <div class="grid grid-cols-2">
-            <div class="field">
-              <label for="centreId">Check-in centre <span class="req">*</span></label>
-              <select id="centreId" name="centreId" required>${CENTRES.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
-            </div>
-            <div class="field">
-              <label for="counterNo">Counter no. <span class="req">*</span></label>
-              <select id="counterNo" name="counterNo" required>${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>
-            </div>
-          </div>
-          <label class="checkbox-row" style="margin-block-end:var(--s4)">
-            <input type="checkbox" id="covering" />
-            I am covering another centre today
-          </label>
           <button type="submit" class="btn btn-primary btn-lg btn-block" id="login-submit">
             <span class="label">Start shift</span>
           </button>
@@ -63,7 +47,6 @@ export function render(params, app) {
     const d = DEMO_ACCOUNTS[Number(btn.dataset.demo)];
     form.employeeId.value = d.employeeId;
     form.pin.value = d.pin;
-    form.centreId.value = d.centreId;
     form.employeeId.focus();
   }));
 
@@ -93,11 +76,11 @@ export function render(params, app) {
     const alertBox = app.querySelector('#login-alert');
     alertBox.innerHTML = '';
     try {
-      await api.staffLogin(form.employeeId.value.trim(), form.pin.value.trim(), form.centreId.value, Number(form.counterNo.value), form.covering.checked);
+      await api.staffLogin(form.employeeId.value.trim(), form.pin.value.trim());
       toast('Shift started.', 'success');
       navigate('#/');
     } catch (err) {
-      const amber = /assigned to|in use by/i.test(err.message);
+      const amber = /disabled/i.test(err.message);
       alertBox.innerHTML = `<div class="field error" style="background:${amber ? 'var(--warning-soft)' : 'var(--danger-soft)'};color:${amber ? '#7C4A03' : 'inherit'};padding:var(--s3);border-radius:var(--r-sm);margin-block-end:var(--s3)">${esc(err.message)}</div>`;
       announce(err.message);
       btn.disabled = false; btn.removeAttribute('aria-busy');

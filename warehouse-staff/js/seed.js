@@ -1,5 +1,5 @@
 /**
- * Mock data for the Warehouse Staff console. The inbound/outbound truck
+ * Mock data for the Warehouse Manager console. The inbound/outbound truck
  * scenarios are hand-specified to match the product brief; zones, locations
  * and incidental details are generated deterministically.
  */

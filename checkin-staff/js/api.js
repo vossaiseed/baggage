@@ -5,6 +5,11 @@
  * A real backend can replace this file without the UI code changing.
  */
 import { getStore, saveStore, resetStore, setSession, getSession } from './store.js';
+import { getStore as getV7Store } from '../../shared/store.js';
+import { authenticate } from '../../shared/services/staffService.js';
+
+/** Shared departure v7 state (users, areas, assignments …). */
+function getV7() { return getV7Store().get(); }
 
 const GLOBAL_FAIL = new URLSearchParams(location.search).get('fail') === '1';
 
@@ -82,34 +87,28 @@ function raiseException(store, opts) {
 /* ===================== AUTH ===================== */
 
 /**
- * @param {string} employeeId @param {string} pin @param {string} centreId @param {number} counterNo @param {boolean} covering
+ * Departure v7 login: employee ID + PIN only (no check-in centre, no counter).
+ * The staff member's collection area comes from the shared v7 store; the
+ * legacy `homeCentre` is kept in the session only so untouched legacy code
+ * paths keep working until Phase 3 replaces them.
+ * @param {string} employeeId @param {string} pin
  */
-export async function staffLogin(employeeId, pin, centreId, counterNo, covering) {
+export async function staffLogin(employeeId, pin) {
   const store = getStore();
-  const staff = store.staff.find((s) => s.employeeId.toLowerCase() === String(employeeId).toLowerCase());
-  if (!staff || staff.pin !== pin) return fail('Invalid employee ID or PIN.');
-  if (!centreId) return fail('Select a check-in centre.');
-  const counter = Number(counterNo);
-  if (!Number.isInteger(counter) || counter < 1 || counter > 10) return fail('Select a counter (1–10).');
-
-  const inUse = store.shifts.find((sh) => !sh.endedAt && sh.centreId === centreId && sh.counterNo === counter && sh.staffId !== staff.id);
-  if (inUse) {
-    const otherStaff = store.staff.find((s) => s.id === inUse.staffId);
-    return fail(`Counter ${counter} is in use by ${otherStaff?.name || 'another staff member'}.`);
-  }
-
-  if (centreId !== staff.homeCentre && !covering) {
-    return fail(`You are assigned to ${centreName(store, staff.homeCentre)}. Check "covering another centre" to continue.`);
-  }
-
-  let shift = store.shifts.find((sh) => !sh.endedAt && sh.staffId === staff.id && sh.centreId === centreId && sh.counterNo === counter);
+  const v7 = getV7();
+  let user;
+  try { user = authenticate(v7, employeeId, pin); } catch (err) { return fail(err.message); }
+  if (!user || user.role !== 'checkin') return fail('Invalid employee ID or PIN.');
+  const legacyStaff = store.staff.find((s) => s.employeeId === user.employee_id) || null; // legacy shift-handover notes only
+  const areaName = v7.collectionAreas.find((a) => a.id === user.area_id)?.name || 'No area assigned';
+  let shift = store.shifts.find((sh) => !sh.endedAt && sh.staffId === (legacyStaff?.id || user.id));
   if (!shift) {
-    shift = { id: newId('SHIFT'), staffId: staff.id, centreId, counterNo: counter, startedAt: nowIso(), endedAt: null, coveringAnotherCentre: !!covering };
+    shift = { id: newId('SHIFT'), staffId: legacyStaff?.id || user.id, centreId: legacyStaff?.homeCentre ?? null, counterNo: null, startedAt: nowIso(), endedAt: null, coveringAnotherCentre: false };
     store.shifts.push(shift);
   }
   const session = {
-    id: staff.id, name: staff.name, employeeId: staff.employeeId, role: staff.role,
-    centreId, centreName: centreName(store, centreId), counterNo: counter, shiftStartedAt: shift.startedAt,
+    id: legacyStaff?.id || user.id, name: user.name, employeeId: user.employee_id, role: 'staff', centreId: legacyStaff?.homeCentre ?? null,
+    centreName: legacyStaff ? centreName(store, legacyStaff.homeCentre) : '', areaId: user.area_id, areaName, counterNo: null, shiftStartedAt: shift.startedAt,
   };
   setSession(session);
   saveStore();
@@ -978,17 +977,22 @@ export async function getBagTimeline(tagNumber) {
 
 /* ===================== NOTIFICATIONS ===================== */
 
-export async function getNotifications() {
-  const store = getStore();
-  return ok(clone(store.notifications));
+/** v7 notifications for Check-in Staff come from the shared store (role- or user-targeted). */
+function v7Notifications() {
+  const me = getSession();
+  return getV7().notifications
+    .filter((n) => n.roles?.includes('checkin') || n.user_id === me?.employeeId)
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30)
+    .map((n) => ({ id: n.id, title: n.title, body: n.body, time: n.at, unread: n.unread, link: n.link || '#/', critical: n.severity === 'critical' }));
 }
 
+export async function getNotifications() { return ok(v7Notifications()); }
+
 export async function markRead(id) {
-  const store = getStore();
-  if (id === 'all') store.notifications.forEach((n) => { n.unread = false; });
-  else { const n = store.notifications.find((x) => x.id === id); if (n) n.unread = false; }
-  saveStore();
-  return ok(clone(store.notifications));
+  const state = getV7();
+  for (const n of state.notifications) if (id === 'all' ? n.roles?.includes('checkin') : n.id === id) n.unread = false;
+  getV7Store().save();
+  return ok(v7Notifications());
 }
 
 /* ===================== HANDOVER ===================== */

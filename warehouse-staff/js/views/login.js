@@ -1,14 +1,12 @@
-import * as api from '../api.js';
+/** Warehouse Manager sign-in — authenticates against the shared v7 users (legacy WH- ids still work). */
+import { login, esc } from '../data.js';
 import { toast, announce } from '../ui.js';
 import { navigate } from '../router.js';
-import { setWorkstation } from '../store.js';
 
 const DEMO_ACCOUNTS = [
-  { label: 'Faisal', employeeId: 'WH-001', pin: '1234' },
-  { label: 'Imran', employeeId: 'WH-002', pin: '1234' },
+  { label: 'Faisal', employeeId: 'WM-001', pin: '1234' },
+  { label: 'Imran', employeeId: 'WM-002', pin: '1234' },
 ];
-
-const WORKSTATIONS = ['Gate', 'Unloading Bay', 'Screening', 'Storage', 'Outbound'];
 
 /** @param {object} params @param {HTMLElement} app */
 export function render(params, app) {
@@ -19,40 +17,32 @@ export function render(params, app) {
           <span class="brand-name fs-xl">Rabel</span>
           <span class="brand-ar">رابل — خدمة أمتعة الحجاج</span>
         </div>
-        <h1 class="fs-lg">Warehouse Staff sign in</h1>
-        <p class="muted fs-sm" style="margin-block-end:var(--s5)">Rabel Central Warehouse — Makkah</p>
+        <h1 class="fs-lg">Warehouse Manager sign in</h1>
+        <p class="muted fs-sm" style="margin-block-end:var(--s5)">Receive collection trucks, screen bags and load the airport run.</p>
         <div id="login-alert" role="alert"></div>
         <form id="login-form" novalidate>
           <div class="field">
             <label for="employeeId">Employee ID <span class="req">*</span></label>
-            <input id="employeeId" name="employeeId" type="text" autocomplete="username" placeholder="WH-001" required />
+            <input id="employeeId" name="employeeId" type="text" autocomplete="username" placeholder="WM-001" required />
             <div class="error" id="err-employeeId" hidden></div>
           </div>
           <div class="field">
             <label for="pin">PIN <span class="req">*</span></label>
-            <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" required />
+            <input id="pin" name="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" required />
             <div class="error" id="err-pin" hidden></div>
           </div>
-          <div class="field">
-            <label for="workstation">Workstation</label>
-            <select id="workstation">
-              ${WORKSTATIONS.map((w) => `<option value="${w}">${w}</option>`).join('')}
-            </select>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg btn-block" id="login-submit">
-            <span class="label">Sign in</span>
-          </button>
+          <button type="submit" class="btn btn-primary btn-lg btn-block" id="login-submit"><span class="label">Start shift</span></button>
         </form>
         <p class="fs-sm muted" style="margin-block-start:var(--s5)">Demo accounts</p>
         <div class="demo-chip-list">
-          ${DEMO_ACCOUNTS.map((d, i) => `<button type="button" class="demo-chip" data-demo="${i}">${d.label}</button>`).join('')}
+          ${DEMO_ACCOUNTS.map((d, i) => `<button type="button" class="demo-chip" data-demo="${i}">${esc(d.label)}</button>`).join('')}
         </div>
       </div>
     </div>`;
 
-  const form = app.querySelector('#login-form');
+  const form = /** @type {HTMLFormElement} */ (app.querySelector('#login-form'));
   app.querySelectorAll('[data-demo]').forEach((btn) => btn.addEventListener('click', () => {
-    const d = DEMO_ACCOUNTS[Number(btn.dataset.demo)];
+    const d = DEMO_ACCOUNTS[Number(/** @type {HTMLElement} */ (btn).dataset.demo)];
     form.employeeId.value = d.employeeId;
     form.pin.value = d.pin;
     form.employeeId.focus();
@@ -66,8 +56,8 @@ export function render(params, app) {
       idErr.textContent = 'Employee ID is required.'; idErr.hidden = false;
       form.employeeId.setAttribute('aria-invalid', 'true'); valid = false;
     } else { idErr.hidden = true; form.employeeId.removeAttribute('aria-invalid'); }
-    if (!form.pin.value.trim()) {
-      pinErr.textContent = 'PIN is required.'; pinErr.hidden = false;
+    if (!/^\d{4}$/.test(form.pin.value.trim())) {
+      pinErr.textContent = 'PIN must be exactly 4 digits.'; pinErr.hidden = false;
       form.pin.setAttribute('aria-invalid', 'true'); valid = false;
     } else { pinErr.hidden = true; form.pin.removeAttribute('aria-invalid'); }
     return valid;
@@ -75,24 +65,21 @@ export function render(params, app) {
   form.employeeId.addEventListener('blur', validate);
   form.pin.addEventListener('blur', validate);
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!validate()) return;
     const btn = app.querySelector('#login-submit');
-    btn.disabled = true; btn.setAttribute('aria-busy', 'true');
-    btn.querySelector('.label').textContent = 'Signing in…';
     const alertBox = app.querySelector('#login-alert');
     alertBox.innerHTML = '';
     try {
-      await api.login(form.employeeId.value.trim(), form.pin.value.trim());
-      setWorkstation(form.querySelector('#workstation').value);
-      toast('Welcome back.', 'success');
+      login(form.employeeId.value.trim(), form.pin.value.trim());
+      toast('Shift started.', 'success');
       navigate('#/');
     } catch (err) {
-      alertBox.innerHTML = `<div class="field error" style="background:var(--danger-soft);padding:var(--s3);border-radius:var(--r-sm);margin-block-end:var(--s3)">${err.message}</div>`;
+      const amber = /disabled/i.test(err.message);
+      alertBox.innerHTML = `<div class="field error" style="background:${amber ? 'var(--warning-soft)' : 'var(--danger-soft)'};color:${amber ? '#7C4A03' : 'inherit'};padding:var(--s3);border-radius:var(--r-sm);margin-block-end:var(--s3)">${esc(err.message)}</div>`;
       announce(err.message);
-      btn.disabled = false; btn.removeAttribute('aria-busy');
-      btn.querySelector('.label').textContent = 'Sign in';
+      btn.querySelector('.label').textContent = 'Start shift';
     }
   });
 

@@ -1,93 +1,56 @@
-import * as api from '../api.js';
-import { skeletonBlock, errorState, esc, icon, toast, fmtWeight, fmtTime } from '../ui.js';
-import { kpiTile } from '../components/kpi-tile.js';
+/**
+ * Departure v7 home for Check-in Staff: today's residence collections for MY collection area, grouped by
+ * 2-hour slot and sorted by flight priority (P1 first). There is no counter: this list IS the loop.
+ */
+import { S, me } from '../v7.js';
+import { listAssignments } from '../../../shared/services/checkinService.js';
+import { esc, icon, fmtTime, fmtDate } from '../ui.js';
 import { navigate } from '../router.js';
 
-let appEl = null;
+let el = null;
+export function render(params, app) { el = app; draw(); return { destroy, poll: draw, refresh: draw }; }
+export function destroy() { el = null; }
 
-export function render(params, app) {
-  appEl = app;
-  load();
-  return { destroy, poll: load, refresh: load };
-}
+const STATUS_COLOR = { Assigned: 'blue', Rescheduled: 'blue', 'En Route': 'amber', Arrived: 'amber', Collected: 'green', 'Handed to Transport': 'green', 'Traveler Absent': 'red' };
+const BP_COLOR = { Verified: 'green', Flagged: 'red', 'Not verified': 'grey' };
 
-export function destroy() { appEl = null; }
-
-async function load() {
-  if (!appEl) return;
-  appEl.innerHTML = skeletonBlock(6);
-  try {
-    const data = await api.getDashboard();
-    if (!appEl) return;
-    renderData(data);
-  } catch (err) {
-    if (!appEl) return;
-    appEl.innerHTML = errorState({ message: err.message });
-    appEl.querySelector('[data-action="retry"]')?.addEventListener('click', load);
-  }
-}
-
-function renderData(data) {
-  const k = data.kpis;
-  appEl.innerHTML = `
-    <div class="page-header"><div><h1 class="page-title">Dashboard</h1><p class="page-subtitle">Today at your counter</p></div></div>
-
-    ${data.pendingHandover ? `
-      <div class="card result-card info" style="margin-block-end:var(--s6)">
-        <h2 class="section-title">Acknowledge handover</h2>
-        <p class="fs-sm">Handed over to you: "${esc(data.pendingHandover.notes)}"</p>
-        <button type="button" class="btn btn-primary" style="margin-block-start:var(--s3)" data-action="ack-handover">${icon('check', 16)} Acknowledge</button>
-      </div>` : ''}
-
-    <div class="kpi-grid">
-      ${kpiTile({ label: 'Appointments', value: k.appointments })}
-      ${kpiTile({ label: 'Checked in', value: k.checkedIn })}
-      ${kpiTile({ label: 'Waiting', value: k.waiting })}
-      ${kpiTile({ label: 'No-show', value: k.noShow })}
-      ${kpiTile({ label: 'On hold', value: k.onHold })}
-      ${kpiTile({ label: 'Bags tagged', value: k.bagsTagged })}
-      ${kpiTile({ label: 'Total kg', value: fmtWeight(k.totalKg) })}
-      ${kpiTile({ label: 'Bags awaiting truck', value: k.bagsAwaitingTruck })}
+function card(it) {
+  const a = it.assignment;
+  const r = it.residence;
+  return `<div class="asg-card" role="button" tabindex="0" data-open="${esc(a.id)}">
+    <div class="asg-top"><span class="prio p${it.priority > 3 ? 99 : it.priority}">${it.priority > 50 ? '—' : `P${it.priority}`}</span>
+      <strong>${esc(it.traveler?.name || '')}</strong><span class="chip chip-${STATUS_COLOR[a.status] || 'grey'}">${esc(a.status)}</span>
+      ${it.routeOrder ? `<span class="chip chip-grey">Stop ${it.routeOrder}</span>` : ''}</div>
+    <div class="asg-meta">${esc(it.flight?.code || '')} · ${esc(r ? `${r.building}, flat ${r.flat_no}` : 'no residence')}${r?.landmark ? ` · ${esc(r.landmark)}` : ''}</div>
+    <div class="chips">
+      <span class="chip chip-blue">${it.bags.length} bag${it.bags.length === 1 ? '' : 's'}</span>
+      ${a.extra_bags ? `<span class="chip chip-amber">${a.extra_bags} extra — approval ${esc(String(a.extra_approval || '').toLowerCase())}</span>` : ''}
+      <span class="chip chip-${BP_COLOR[it.boardingPass]}">Boarding pass: ${esc(it.boardingPass)}</span>
+      <span class="chip chip-${it.releasedTags ? 'green' : 'grey'}">${it.releasedTags} tag${it.releasedTags === 1 ? '' : 's'} ready</span>
     </div>
-
-    <div class="grid" style="grid-template-columns:2fr 1fr" id="dash-main-grid">
-      <div class="card">
-        <h2 class="section-title">Next up</h2>
-        ${data.nextUp.length ? `<div class="stack gap-3">${data.nextUp.map(nextUpRow).join('')}</div>` : `<p class="fs-sm muted">No upcoming appointments.</p>`}
-      </div>
-      <div class="card">
-        <h2 class="section-title">Quick actions</h2>
-        <div class="quick-action-grid">
-          <button type="button" class="btn btn-secondary quick-action" data-action="scan">${icon('scan-line', 28)}<span class="fs-sm">Scan QR</span></button>
-          <button type="button" class="btn btn-secondary quick-action" data-action="search">${icon('search', 28)}<span class="fs-sm">Search passport</span></button>
-          <button type="button" class="btn btn-secondary quick-action" data-action="walkin">${icon('user-plus', 28)}<span class="fs-sm">Walk-in</span></button>
-          <button type="button" class="btn btn-secondary quick-action" data-action="load-cart">${icon('shopping-cart', 28)}<span class="fs-sm">Load cart</span></button>
-        </div>
-      </div>
-    </div>`;
-
-  appEl.querySelector('[data-action="ack-handover"]')?.addEventListener('click', async () => {
-    try { await api.acknowledgeHandover(data.pendingHandover.id); toast('Handover acknowledged.', 'success'); load(); } catch (err) { toast(err.message, 'error'); }
-  });
-  appEl.querySelectorAll('[data-appt-id]').forEach((row) => row.addEventListener('click', () => navigate(`#/checkin?appt=${row.dataset.apptId}`)));
-  appEl.querySelectorAll('[data-start-appt]').forEach((btn) => btn.addEventListener('click', (e) => { e.stopPropagation(); navigate(`#/checkin?appt=${btn.dataset.startAppt}`); }));
-  appEl.querySelector('[data-action="scan"]')?.addEventListener('click', () => navigate('#/checkin'));
-  appEl.querySelector('[data-action="search"]')?.addEventListener('click', () => navigate('#/checkin?mode=search'));
-  appEl.querySelector('[data-action="walkin"]')?.addEventListener('click', () => navigate('#/checkin?mode=walkin'));
-  appEl.querySelector('[data-action="load-cart"]')?.addEventListener('click', () => navigate('#/loading'));
-
-  const grid = appEl.querySelector('#dash-main-grid');
-  if (grid) grid.style.gridTemplateColumns = window.innerWidth < 1024 ? '1fr' : '2fr 1fr';
+    ${it.mapsUrl ? `<a class="btn btn-secondary" href="${esc(it.mapsUrl)}" target="_blank" rel="noopener" data-maps>${icon('map-pin', 16)} Open in Maps</a>` : ''}
+  </div>`;
 }
 
-function nextUpRow(a) {
-  return `
-    <div class="card" data-appt-id="${esc(a.id)}" style="padding:var(--s4)">
-      <div class="row" style="justify-content:space-between">
-        <strong class="fs-sm">${esc(a.pilgrimName)}</strong>
-        <span class="fs-sm mono">${fmtTime(a.slotAt)}</span>
-      </div>
-      <div class="fs-xs muted" style="margin-block-start:4px">${esc(a.flightCode)} · ${a.declaredBags} bag${a.declaredBags === 1 ? '' : 's'}</div>
-      <button type="button" class="btn btn-primary" style="margin-block-start:var(--s3);height:32px;font-size:var(--fs-sm)" data-start-appt="${esc(a.id)}">Start check-in</button>
+function draw() {
+  if (!el) return;
+  let groups; let user;
+  try { user = me(); groups = listAssignments(S(), user, { now: Date.now() }); } catch (err) { el.innerHTML = `<div class="state-block error-state"><p>${esc(err.message)}</p></div>`; return; }
+  const area = S().collectionAreas.find((a) => a.id === user.area_id);
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
+  const done = S().collectionAssignments.filter((a) => a.collection_area_id === user.area_id && ['Collected', 'Handed to Transport'].includes(a.status)).length;
+  el.innerHTML = `
+    <div class="page-wrap">
+    <div class="page-header"><div><h1 class="page-title">Assignments</h1>
+      <p class="page-subtitle">${esc(area?.name || 'No area assigned')} · ${total} to collect · ${done} done</p></div></div>
+    ${total ? groups.map((g) => `
+      <div class="slot-head"><h2>${g.slot ? `${esc(fmtDate(g.slot.start))}, ${esc(fmtTime(g.slot.start))}–${esc(fmtTime(g.slot.end))}` : 'No slot'}</h2><span class="fs-sm muted">${g.items.length} stop${g.items.length === 1 ? '' : 's'}</span></div>
+      <div class="asg-list">${g.items.map(card).join('')}</div>`).join('')
+      : `<div class="state-block"><p>No open collections in your area. Travelers book a slot at their residence and appear here, ordered by flight priority.</p></div>`}
     </div>`;
+  el.querySelectorAll('[data-open]').forEach((c) => {
+    const open = () => navigate(`#/a/${c.dataset.open}`);
+    c.addEventListener('click', (e) => { if (!e.target.closest('[data-maps]')) open(); });
+    c.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+  });
 }

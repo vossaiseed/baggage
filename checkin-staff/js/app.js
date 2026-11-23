@@ -8,24 +8,23 @@ import { icon, toast, esc } from './ui.js';
 
 import * as loginView from './views/login.js';
 import * as dashboardView from './views/dashboard.js';
-import * as appointmentsView from './views/appointments.js';
-import * as checkinView from './views/checkin.js';
-import * as loadingView from './views/loading.js';
+import * as assignmentView from './views/assignment.js';
 import * as exceptionsView from './views/exceptions.js';
-import * as historyView from './views/history.js';
 import * as handoverView from './views/handover.js';
 
 window.RABEL_DEBUG = window.RABEL_DEBUG || false;
 
+// Departure v7: there is no check-in counter. Staff collect and tag bags at the
+// traveler's residence (assignments arrive in Phase 3). Counter / appointment /
+// cart screens are hidden from the menu and unreachable by route (see LEGACY_PATHS).
 const NAV_ITEMS = [
-  { hash: '#/', match: '/', label: 'Dashboard', iconName: 'layout-dashboard' },
-  { hash: '#/appointments', match: '/appointments', label: 'Appointments', iconName: 'calendar-clock' },
-  { hash: '#/checkin', match: '/checkin', label: 'Check-in', iconName: 'scan-line' },
-  { hash: '#/loading', match: '/loading', label: 'Loading', iconName: 'truck' },
+  { hash: '#/', match: '/', label: 'Assignments', iconName: 'map-pin' },
   { hash: '#/exceptions', match: '/exceptions', label: 'Exceptions', iconName: 'alert-triangle' },
-  { hash: '#/history', match: '/history', label: 'History', iconName: 'history' },
   { hash: '#/handover', match: '/handover', label: 'Handover', iconName: 'clipboard-check' },
 ];
+
+/** Pre-v7 screens: code kept (data stays read-only, labelled Legacy) but never routable. */
+const LEGACY_PATHS = ['/appointments', '/checkin', '/loading', '/history'];
 
 let shellMounted = false;
 let iconObserver = null;
@@ -113,8 +112,7 @@ function mountShell() {
       <header class="topbar">
         <div class="row gap-3 wrap">
           <span class="badge-env">DEMO</span>
-          <span class="fs-sm fw-semibold">${esc(session?.centreName || '')}</span>
-          <span class="fs-sm muted">Counter ${esc(session?.counterNo || '')}</span>
+          <span class="fs-sm fw-semibold">${esc(session?.areaName || '')}</span>
           <span class="fs-sm muted">${esc(session?.name || '')}</span>
         </div>
         <div class="row gap-3">
@@ -233,7 +231,6 @@ function openProfileDropdown() {
     </button>
     ${demoOn ? `
       <button type="button" class="bell-item" data-act="demo-overweight">${icon('scale', 16)} Force next scale reading overweight</button>
-      <button type="button" class="bell-item" data-act="demo-walkin">${icon('user-plus', 16)} Create test booking for today</button>
       <button type="button" class="bell-item" data-act="demo-reset">${icon('rotate-ccw', 16)} Reset demo data</button>
     ` : ''}
     <button type="button" class="bell-item" style="color:var(--danger)" data-act="logout">${icon('log-out', 16)} Log out</button>
@@ -253,7 +250,6 @@ function openProfileDropdown() {
       return;
     }
     if (act === 'demo-overweight') { await api.demoForceOverweight(); toast('Next scale reading will be forced overweight.', 'info'); }
-    if (act === 'demo-walkin') { const r = await api.demoCreateTestBooking(); toast('A test booking was created for today.', 'success'); closeAllDropdowns(); navigate('#/appointments'); return; }
     if (act === 'demo-reset') {
       api.demoReset();
       toast('Demo data reset to the original seed.', 'success');
@@ -298,12 +294,9 @@ function registerRoutes() {
     return loginView.render(params, document.getElementById('app')) || { destroy: loginView.destroy };
   });
   route('/', wrapView(dashboardView));
-  route('/appointments', wrapView(appointmentsView));
-  route('/checkin', wrapView(checkinView));
-  route('/loading', wrapView(loadingView));
+  route('/a/:id', wrapView(assignmentView));
   route('/exceptions', wrapView(exceptionsView));
   route('/exceptions/:id', wrapView(exceptionsView));
-  route('/history', wrapView(historyView));
   route('/handover', wrapView(handoverView));
 
   setNotFound((app) => {
@@ -317,6 +310,7 @@ function registerRoutes() {
   });
 
   setGuard((path) => {
+    if (LEGACY_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) return '#/';
     if (path !== '/login' && !isAuthed()) return '#/login';
     if (path === '/login' && isAuthed()) return '#/';
     return true;
