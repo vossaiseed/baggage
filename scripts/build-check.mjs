@@ -8,7 +8,7 @@ import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SKIP = new Set(['node_modules', '.git', 'tests', 'docs', 'scripts', 'coverage', '.claude', '.vscode']);
+const SKIP = new Set(['node_modules', '.git', 'tests', 'docs', 'scripts', 'coverage', '.claude', '.vscode', 'test-results', 'playwright-report']);
 const problems = [];
 let jsFiles = 0;
 let htmlFiles = 0;
