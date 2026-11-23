@@ -136,3 +136,7 @@
 .stat-list > div{display:flex;justify-content:space-between;gap:var(--s3)}
 .stat-list .k{color:var(--muted)}
 .stat-list .v{font-family:var(--mono);font-weight:var(--fw-semibold)}
+
+/* The one destructive action an Ops Manager has */
+.danger-zone{border-color:var(--danger)}
+.danger-zone .section-title{color:var(--danger)}

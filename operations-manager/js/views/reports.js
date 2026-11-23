@@ -2,9 +2,10 @@
  * Reports — one roll-up over a chosen time range, plus CSV exports of the bag, exception and
  * scan ledgers. Every number comes from shared/services/reportService.js.
  */
-import { read, chip, levelColor } from '../data.js';
+import { S, read, chip, levelColor, store, user } from '../data.js';
 import * as rep from '../../../shared/services/reportService.js';
-import { esc, fmtDateTime, downloadBlob, emptyState } from '../ui.js';
+import { resetDemoData } from '../../../shared/services/adminService.js';
+import { esc, fmtDateTime, downloadBlob, emptyState, toast, confirmDialog } from '../ui.js';
 import { kpiTile } from '../components/kpi-tile.js';
 
 let el = null;
@@ -112,10 +113,37 @@ function draw() {
       <button type="button" class="btn btn-secondary" data-csv="bags">Export bags CSV</button>
       <button type="button" class="btn btn-secondary" data-csv="exceptions">Export exceptions CSV</button>
       <button type="button" class="btn btn-secondary" data-csv="scans">Export scans CSV</button>
-    </div>`;
+    </div>
+
+    <section class="card mt danger-zone">
+      <h2 class="section-title">Demo data</h2>
+      <p class="fs-sm">Rebuilds the departure store from the seed — the whole demo starts again from the same place.
+      The arrival apps and the old per-app stores are not touched.</p>
+      <p class="fs-sm muted">Currently holding ${S().flights.length} flight(s), ${S().travelers.length} traveler(s), ${S().bags.length} bag(s).</p>
+      <button type="button" class="btn btn-danger" id="reset">Reset demo data</button>
+    </section>`;
 
   el.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => { hours = Number(b.getAttribute('data-hours')); draw(); }));
   el.querySelectorAll('[data-csv]').forEach((b) => b.addEventListener('click', () => exportCsv(b.getAttribute('data-csv'))));
+  el.querySelector('#reset').addEventListener('click', openReset);
+}
+
+async function openReset() {
+  const ok = await confirmDialog({
+    title: 'Reset the demo data?',
+    body: 'The departure store is rebuilt from the seed. Anything done in the demo since the last reset is gone.',
+    confirmLabel: 'Reset demo data',
+    danger: true,
+    requireText: 'RESET',
+  });
+  if (!ok) return;
+  try {
+    const next = resetDemoData(store(), { user: user(), now: Date.now() });
+    toast(`Demo data rebuilt — ${next.flights.length} flights, ${next.travelers.length} travelers, ${next.bags.length} bags.`, 'success');
+    draw();
+  } catch (err) {
+    toast(err.message || String(err), 'error');
+  }
 }
 
 const COLUMNS = {

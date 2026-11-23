@@ -9,6 +9,7 @@ import { toast, esc } from './ui.js';
 
 export const S = () => getStore().get();
 export const save = () => getStore().save();
+export const store = () => getStore();
 
 /** @returns {any|null} the signed-in v7 user (re-read so a disabled account stops working) */
 export function user() {
