@@ -301,6 +301,37 @@ describe('SGS handover', () => {
     expect(() => ap.completeHandover(s, h.id, { officer: 'A', signature: 'sig' }, ctx(APC))).toThrow(/already closed/);
   });
 
+  it('keeps the manifest as opened and records what actually crossed', () => {
+    const trip = offloaded();
+    const h = ap.startHandover(s, 'FLT-SV-1821', ctx(APC));
+    const r = ap.completeHandover(s, h.id, { officer: 'A. Officer', signature: 'sig' }, ctx(APC));
+    expect(h.bag_ids).toEqual(trip.bag_ids);
+    expect(h.handed_bag_ids).toEqual(trip.bag_ids);
+    expect(h.handed_tags).toEqual(trip.bag_ids.map((id) => bagById(id).airline_tag_no));
+    expect(h.withdrawn).toEqual([]);
+    expect(r.voucher.bag_ids).toEqual(trip.bag_ids);
+  });
+
+  it('a bag that leaves the manifest before signing stays on the record and goes to Ops', () => {
+    const trip = offloaded();
+    const h = ap.startHandover(s, 'FLT-SV-1821', ctx(APC));
+    // The flight is cancelled while the manifest is open, so one bag is held instead of handed
+    // over. It was never disputed — without `withdrawn` it would vanish from the handover.
+    s.flights.find((f) => f.id === 'FLT-SV-1821').status = 'Cancelled';
+    ap.holdCancelledBags(s, [trip.bag_ids[0]], { rack: 'R-09' }, ctx(APC));
+
+    const r = ap.completeHandover(s, h.id, { officer: 'A. Officer', signature: 'sig' }, ctx(APC));
+    expect(r.handed).toBe(1);
+    expect(r.withheld).toEqual([]);
+    expect(r.withdrawn).toHaveLength(1);
+    expect(r.withdrawn[0]).toMatchObject({ bag_id: trip.bag_ids[0], status: 'Held – Cancelled Flight' });
+    expect(h.bag_ids).toEqual(trip.bag_ids);                 // the sheet the officer read is intact
+    expect(h.handed_bag_ids).toEqual([trip.bag_ids[1]]);     // only this one crossed
+    expect(r.voucher.bag_ids).toEqual([trip.bag_ids[1]]);
+    expect(r.voucher.counted_tags).toEqual([bagById(trip.bag_ids[1]).airline_tag_no]);
+    expect(s.exceptions.some((e) => e.type === 'Count Mismatch' && /left the manifest before it was signed/.test(e.notes))).toBe(true);
+  });
+
   it('withholds a bag whose dispute is unresolved and raises a Count Mismatch', () => {
     const trip = offloaded();
     const h = ap.startHandover(s, 'FLT-SV-1821', ctx(APC));
