@@ -49,7 +49,8 @@ function drawQueue() {
     ${recent.length ? `<h2 class="section-title" style="margin-block-start:var(--s6)">Handed over</h2>
       <div class="table-wrap"><table><thead><tr><th>Handover</th><th>Flight</th><th>Bags</th><th>Officer</th><th>When</th><th>Voucher</th></tr></thead>
       <tbody>${recent.map((h) => `<tr><td class="mono fs-sm">${esc(h.id)}</td>
-        <td class="mono">${esc(S().flights.find((f) => f.id === h.flight_id)?.code || '—')}</td><td>${h.bag_ids.length}</td>
+        <td class="mono">${esc(S().flights.find((f) => f.id === h.flight_id)?.code || '—')}</td>
+        <td>${h.handed_bag_ids.length}${h.handed_bag_ids.length < h.bag_ids.length ? ` <span class="fs-xs muted">of ${h.bag_ids.length}</span>` : ''}</td>
         <td>${esc(h.officer || '—')}</td><td>${esc(fmtDateTime(h.handed_at))}</td>
         <td><a href="#/dep/voucher">${esc(S().sgsVouchers.find((v) => v.id === h.voucher_id)?.voucher_no || '—')}</a></td></tr>`).join('')}</tbody></table></div>` : ''}`;
 
@@ -69,11 +70,15 @@ function manifestRows(h) {
     if (!bag) return '';
     const dispute = h.disputed.find((d) => d.bag_id === id && !d.resolved_at);
     const cleared = h.disputed.find((d) => d.bag_id === id && d.resolved_at);
+    const gone = h.withdrawn.find((w) => w.bag_id === id);
     return `<tr>
       <td class="mono fs-sm">${esc(bag.airline_tag_no || `${bag.tag_no} (no airline tag)`)}</td>
       <td class="mono fs-sm">${esc(bag.tag_no || '—')}</td>
       <td>${esc(bag.status)}</td>
-      <td>${dispute ? chip(`Disputed — ${dispute.reason}`, 'red') : cleared ? chip('Dispute cleared', 'green') : chip('On the manifest', 'grey')}</td>
+      <td>${dispute ? chip(`Disputed — ${dispute.reason}`, 'red')
+        : gone ? chip(`Left the manifest — ${gone.status}`, 'amber')
+        : cleared ? chip('Dispute cleared', 'green')
+        : h.status === 'Open' ? chip('On the manifest', 'grey') : chip('Handed over', 'green')}</td>
       <td>${h.status === 'Open' && !dispute && !cleared ? `<button type="button" class="btn btn-ghost" data-dispute="${esc(id)}">Dispute</button>` : ''}</td>
     </tr>`;
   }).join('');
@@ -89,7 +94,8 @@ function drawManifest() {
 
   el.innerHTML = `
     <div class="page-header"><div><h1 class="page-title mono">${esc(flight?.code || '')}</h1>
-      <p class="page-subtitle">${esc(h.id)} · ${h.bag_ids.length} bag(s) · ${chip(open ? 'Open' : 'Handed over', open ? 'blue' : 'green')}</p></div></div>
+      <p class="page-subtitle">${esc(h.id)} · ${open ? `${h.bag_ids.length} bag(s) on the manifest`
+        : `${h.handed_bag_ids.length} of ${h.bag_ids.length} bag(s) handed over`} · ${chip(open ? 'Open' : 'Handed over', open ? 'blue' : 'green')}</p></div></div>
     ${open ? `<div class="card stack gap-2" style="margin-block-end:var(--s4)">
         <h2 class="section-title">Reconcile the list</h2>
         <p class="fs-sm muted">Read the manifest against the Authority's count. Anything they will not accept — a tag they cannot read, a bag they cannot find — gets disputed, and only those bags are scanned again.</p>
@@ -113,7 +119,10 @@ function drawManifest() {
       </div>`
     : `<div class="card stack gap-2" style="margin-block-start:var(--s4)">
         <h2 class="section-title">Handed over</h2>
-        <p class="fs-sm">${h.bag_ids.length} bag(s) signed for by ${esc(h.officer || '—')} at ${esc(fmtDateTime(h.handed_at))}.</p>
+        <p class="fs-sm">${h.handed_bag_ids.length} bag(s) signed for by ${esc(h.officer || '—')} at ${esc(fmtDateTime(h.handed_at))}.</p>
+        ${h.withdrawn.length ? `<p class="fs-sm" style="color:var(--warning)">${h.withdrawn.length} bag(s) on the manifest left the line before it was signed
+          (${esc(h.withdrawn.map((w) => `${w.tag} — ${w.status}`).join(', '))}). Ops has been told.</p>` : ''}
+        ${h.disputed.filter((d) => !d.resolved_at).length ? `<p class="fs-sm" style="color:var(--danger)">${h.disputed.filter((d) => !d.resolved_at).length} disputed bag(s) stayed with Rabel.</p>` : ''}
         <a class="btn btn-primary" href="#/dep/voucher">Go to the voucher</a></div>`}
     <a class="btn btn-ghost mt" href="#/dep/handover">&larr; Back to handover</a>`;
 

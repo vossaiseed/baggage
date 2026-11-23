@@ -97,6 +97,11 @@ export function makeTrip(p = {}) {
 /**
  * The physical hand-off of a flight's bags to the Airport Authority (SGS) at the airport.
  * `tags` is the airline-tag manifest; disputed bags are the only ones scanned again.
+ *
+ * `bag_ids`/`tags` are the manifest AS OPENED and never change — the sheet the officer reads.
+ * What actually crossed is `handed_bag_ids`/`handed_tags`; a bag on the manifest that did not
+ * cross is in `disputed` (the Authority would not take it) or `withdrawn` (it left the line
+ * before signing — held for a cancelled flight, returned to its traveler).
  * @param {{id?:string,flight_id?:string,airport_id?:string|null,bag_ids?:string[],tags?:string[],status?:string,created_at?:string,by?:string|null}} [p]
  */
 export function makeHandover(p = {}) {
@@ -104,6 +109,8 @@ export function makeHandover(p = {}) {
     id: p.id, flight_id: p.flight_id ?? null, airport_id: p.airport_id ?? null,
     bag_ids: p.bag_ids || [], tags: p.tags || [], status: p.status || 'Open',
     disputed: /** @type {{bag_id:string, reason:string, resolved_at:string|null}[]} */ ([]),
+    handed_bag_ids: /** @type {string[]} */ ([]), handed_tags: /** @type {string[]} */ ([]),
+    withdrawn: /** @type {{bag_id:string, tag:string, status:string, at:string}[]} */ ([]),
     officer: null, signature: null, handed_at: null, voucher_id: null,
     created_at: p.created_at || new Date().toISOString(), by: p.by ?? null,
   };

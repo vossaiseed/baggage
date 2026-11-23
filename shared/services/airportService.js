@@ -417,9 +417,14 @@ export function scanDisputedTag(state, handoverId, scan, ctx) {
 /**
  * Hand the manifest over: every bag on it goes Received at Airport → Handed to Airport Authority,
  * and SGS is given the tag list (the simulated adapter issues the voucher straight away).
- * Bags with an unresolved dispute are left behind and raise a Count Mismatch for Ops.
+ *
+ * The manifest as opened (`bag_ids`/`tags`) is left untouched — it is the sheet the officer read.
+ * Two kinds of bag can be on it without crossing, and both stay on the record and go to Ops:
+ * one with an unresolved dispute (`disputed`), and one that left the line while the manifest was
+ * open (`withdrawn` — held for a cancelled flight, returned to its traveler).
  * @param {{ officer?: string, signature?: string }} proof
- * @returns {{ handover: object, voucher: object, handed: number, withheld: string[] }}
+ * @returns {{ handover: object, voucher: object, handed: number, withheld: string[],
+ *             withdrawn: {bag_id:string, tag:string, status:string, at:string}[] }}
  */
 export function completeHandover(state, handoverId, proof, ctx) {
   assertCan(ctx.user, 'voucher:create');
@@ -429,36 +434,50 @@ export function completeHandover(state, handoverId, proof, ctx) {
   const signature = String(proof?.signature || '').trim();
   if (!officer || !signature) throw new ServiceError('SIGNATURE_REQUIRED', 'Record the Authority officer\'s name and signature.');
 
+  const at = nowIso(ctx);
   const unresolved = h.disputed.filter((d) => !d.resolved_at).map((d) => d.bag_id);
-  const handedBags = state.bags.filter((b) => h.bag_ids.includes(b.id) && !unresolved.includes(b.id) && b.status === 'Received at Airport');
+  const onManifest = state.bags.filter((b) => h.bag_ids.includes(b.id));
+  const notDisputed = onManifest.filter((b) => !unresolved.includes(b.id));
+  // A bag can leave the manifest between opening it and signing for it without ever being
+  // disputed. Dropping it from the record silently would hide it from everyone, so it is kept as
+  // `withdrawn` with the status it left in, and reported with the disputed bags.
+  const withdrawn = notDisputed
+    .filter((b) => b.status !== 'Received at Airport')
+    .map((b) => ({ bag_id: b.id, tag: manifestTag(b), status: b.status, at }));
+  const handedBags = notDisputed.filter((b) => b.status === 'Received at Airport');
   if (!handedBags.length) throw new ServiceError('NOTHING_TO_HAND_OVER', 'Every bag on this manifest is disputed or has already moved on.');
 
-  const at = nowIso(ctx);
   for (const b of handedBags) advanceBag(state, b.id, 'Handed to Airport Authority', { user: ctx.user, now: ctx.now, note: `Handover ${h.id} — ${officer}` });
-  h.bag_ids = handedBags.map((b) => b.id);
-  h.tags = handedBags.map(manifestTag);
+  h.handed_bag_ids = handedBags.map((b) => b.id);
+  h.handed_tags = handedBags.map(manifestTag);
+  h.withdrawn = withdrawn;
   h.officer = officer;
   h.signature = signature;
   h.handed_at = at;
   h.status = 'Handed';
 
-  const voucher = makeSgsVoucher({ id: `VCH-${String(nextCounter(state, 'voucher')).padStart(6, '0')}`, handover_id: h.id, flight_id: h.flight_id, airport_id: h.airport_id, bag_ids: h.bag_ids, issued_at: at });
-  const sgs = integrations().sgs.submitHandover(state, { id: h.id, flight_id: h.flight_id, tags: h.tags });
+  const voucher = makeSgsVoucher({ id: `VCH-${String(nextCounter(state, 'voucher')).padStart(6, '0')}`, handover_id: h.id, flight_id: h.flight_id, airport_id: h.airport_id, bag_ids: h.handed_bag_ids, issued_at: at });
+  const sgs = integrations().sgs.submitHandover(state, { id: h.id, flight_id: h.flight_id, tags: h.handed_tags });
   voucher.voucher_no = sgs.voucher_no;
   voucher.counted_tags = sgs.counted_tags;
   state.sgsVouchers.push(voucher);
   h.voucher_id = voucher.id;
 
-  if (unresolved.length) {
-    const labels = state.bags.filter((b) => unresolved.includes(b.id)).map((b) => manifestTag(b));
+  if (unresolved.length || withdrawn.length) {
+    const why = [];
+    if (unresolved.length) {
+      const labels = state.bags.filter((b) => unresolved.includes(b.id)).map((b) => manifestTag(b));
+      why.push(`${labels.join(', ')} were disputed by the Authority and withheld`);
+    }
+    if (withdrawn.length) why.push(`${withdrawn.map((w) => `${w.tag} (${w.status})`).join(', ')} left the manifest before it was signed`);
     raiseException(state, {
-      type: 'Count Mismatch', severity: 'High', flight_id: h.flight_id, bag_id: unresolved[0],
-      notes: `Handover ${h.id}: ${labels.join(', ')} were disputed by the Authority and withheld. ${handedBags.length} bag(s) handed over.`,
+      type: 'Count Mismatch', severity: 'High', flight_id: h.flight_id, bag_id: unresolved[0] ?? withdrawn[0].bag_id,
+      notes: `Handover ${h.id}: ${why.join('; ')}. ${handedBags.length} of ${h.bag_ids.length} bag(s) on the manifest were handed over.`,
     }, ctx);
   }
   notify(state, { role: 'backend', title: `${state.flights.find((f) => f.id === h.flight_id)?.code || 'Flight'} handed to the Authority`, body: `${handedBags.length} bag(s) on voucher ${voucher.voucher_no}.`, link: '#/manifest' }, ctx);
-  audit(state, ctx, { action: 'airport.handover_complete', entity: 'Handover', entityId: h.id, after: { handed: handedBags.length, withheld: unresolved.length, voucher: voucher.voucher_no } });
-  return { handover: h, voucher, handed: handedBags.length, withheld: unresolved };
+  audit(state, ctx, { action: 'airport.handover_complete', entity: 'Handover', entityId: h.id, after: { manifest: h.bag_ids.length, handed: handedBags.length, withheld: unresolved.length, withdrawn: withdrawn.length, voucher: voucher.voucher_no } });
+  return { handover: h, voucher, handed: handedBags.length, withheld: unresolved, withdrawn };
 }
 
 /* ───────────────────────── Voucher ───────────────────────── */
